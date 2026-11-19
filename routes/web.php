@@ -10,6 +10,7 @@ Route::get('/', fn() => redirect()->route('catalog.index'));
 
 Route::prefix('catalog')->name('catalog.')->group(function () {
     Route::get('/',             [CatalogController::class, 'index'])->name('index');
+    Route::get('/orders',       [CatalogController::class, 'orders'])->name('orders');
     Route::get('/product/{id}', [CatalogController::class, 'show'])->name('show');
     Route::post('/order',       [CatalogController::class, 'storeOrder'])->name('order.store');
 });

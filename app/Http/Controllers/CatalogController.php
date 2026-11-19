@@ -197,4 +197,42 @@ class CatalogController extends Controller
             ], 201);
         });
     }
+
+    /**
+     * GET /catalog/orders (Riwayat Pesanan Pembeli)
+     */
+    public function orders(Request $request)
+    {
+        $status = $request->input('status', 'all');
+
+        $allOrders = Order::with(['items', 'store'])->latest()->get()->map(function ($o) {
+            $firstItem = $o->items->first();
+            return [
+                'id'             => $o->id,
+                'order_code'     => $o->order_code,
+                'store_name'     => $o->store?->name ?? 'UMKM Bahari',
+                'store_location' => $o->store?->location_label ?? 'Indonesia',
+                'item_name'      => $firstItem?->product_name_snapshot ?? 'Produk Olahan Laut',
+                'unit_price'     => $firstItem?->unit_price_snapshot ?? 0,
+                'unit'           => $firstItem?->unit_snapshot ?? 'kg',
+                'quantity'       => $firstItem?->quantity ?? 1,
+                'subtotal'       => $o->subtotal,
+                'status'         => $o->status,
+                'recipient_name' => $o->recipient_name,
+                'recipient_phone'=> $o->recipient_phone,
+                'date'           => $o->created_at->format('d M Y, H:i'),
+            ];
+        });
+
+        if ($status && $status !== 'all') {
+            $filteredOrders = $allOrders->filter(fn($o) => $o['status'] === $status)->values();
+        } else {
+            $filteredOrders = $allOrders;
+        }
+
+        return view('catalog.orders', [
+            'orders'    => $filteredOrders,
+            'allOrders' => $allOrders,
+        ]);
+    }
 }
