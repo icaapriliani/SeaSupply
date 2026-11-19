@@ -262,13 +262,43 @@ document.addEventListener('DOMContentLoaded', function () {
     btnTambah.addEventListener('click', () => modalTambah.classList.add('open'));
     btnBatalTambah.addEventListener('click', () => modalTambah.classList.remove('open'));
 
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
     formTambah.addEventListener('submit', function (e) {
         e.preventDefault();
         const nama = document.getElementById('prodName').value;
-        modalTambah.classList.remove('open');
-        formTambah.reset();
+        const category = document.getElementById('prodCategory').value;
+        const unit = document.getElementById('prodUnit').value;
+        const price = document.getElementById('prodPrice').value;
+        const stock = document.getElementById('prodStock').value;
+        const description = document.getElementById('prodDesc').value;
 
-        showToast('✓ Produk "' + nama + '" berhasil ditambahkan!', 'success');
+        fetch('{{ route('owner.products.store') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken || ''
+            },
+            body: JSON.stringify({
+                name: nama,
+                category: category,
+                unit: unit,
+                price: parseInt(price),
+                stock: parseInt(stock),
+                description: description
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            modalTambah.classList.remove('open');
+            formTambah.reset();
+            showToast('✓ ' + data.message, 'success');
+            setTimeout(() => window.location.reload(), 1200);
+        })
+        .catch(err => {
+            alert('Gagal menambahkan produk ke database.');
+        });
     });
 
     // Modal Detail Order & Update Status
@@ -312,8 +342,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
     btnUpdateStatus.addEventListener('click', function () {
         const newStatus = selectStatus.value;
-        modalOrder.classList.remove('open');
-        showToast('✓ Status pesanan #' + currentOrderCode + ' diperbarui menjadi: ' + newStatus, 'success');
+        btnUpdateStatus.disabled = true;
+
+        fetch('/owner/orders/' + currentOrderCode + '/status', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken || ''
+            },
+            body: JSON.stringify({ status: newStatus })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btnUpdateStatus.disabled = false;
+            modalOrder.classList.remove('open');
+            showToast('✓ ' + data.message, 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        })
+        .catch(err => {
+            btnUpdateStatus.disabled = false;
+            alert('Gagal memperbarui status di database.');
+        });
     });
 
     // Helper Toast

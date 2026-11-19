@@ -168,37 +168,60 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
     // 1. Tombol Aksi Cepat Operasional (Proses -> Kirim -> Selesai)
     document.querySelectorAll('.btn-action-step').forEach(btn => {
         btn.addEventListener('click', function () {
             const code       = this.dataset.code;
             const nextStatus = this.dataset.nextStatus;
             const nextLabel  = this.dataset.nextLabel;
+            const currentBtn = this;
 
-            // Update badge tampilan
-            const badgeCell = document.getElementById('badgeCell-' + code);
-            if (badgeCell) {
-                let badgeClass = 'ss-badge--' + nextStatus;
-                badgeCell.innerHTML = `<span class="ss-badge ${badgeClass}">${nextLabel}</span>`;
-            }
+            currentBtn.disabled = true;
 
-            // Update atau hilangkan tombol tindakan
-            if (nextStatus === 'processing') {
-                this.dataset.nextStatus = 'shipped';
-                this.dataset.nextLabel  = 'Dikirim';
-                this.textContent        = 'Kirim';
-                this.style.background   = 'var(--color-sea-teal)';
-            } else if (nextStatus === 'shipped') {
-                this.dataset.nextStatus = 'completed';
-                this.dataset.nextLabel  = 'Selesai';
-                this.textContent        = 'Selesai';
-                this.style.background   = 'var(--color-success)';
-                this.style.borderColor  = 'var(--color-success)';
-            } else {
-                this.remove();
-            }
+            fetch('/employee/orders/' + code + '/status', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || ''
+                },
+                body: JSON.stringify({ status: nextStatus })
+            })
+            .then(res => res.json())
+            .then(data => {
+                currentBtn.disabled = false;
 
-            showToast(`✓ Pesanan #${code} berhasil diperbarui ke status: ${nextLabel}`, 'success');
+                // Update badge tampilan
+                const badgeCell = document.getElementById('badgeCell-' + code);
+                if (badgeCell) {
+                    let badgeClass = 'ss-badge--' + nextStatus;
+                    badgeCell.innerHTML = `<span class="ss-badge ${badgeClass}">${nextLabel}</span>`;
+                }
+
+                // Update atau hilangkan tombol tindakan
+                if (nextStatus === 'processing') {
+                    currentBtn.dataset.nextStatus = 'shipped';
+                    currentBtn.dataset.nextLabel  = 'Dikirim';
+                    currentBtn.textContent        = 'Kirim';
+                    currentBtn.style.background   = 'var(--color-sea-teal)';
+                } else if (nextStatus === 'shipped') {
+                    currentBtn.dataset.nextStatus = 'completed';
+                    currentBtn.dataset.nextLabel  = 'Selesai';
+                    currentBtn.textContent        = 'Selesai';
+                    currentBtn.style.background   = 'var(--color-success)';
+                    currentBtn.style.borderColor  = 'var(--color-success)';
+                } else {
+                    currentBtn.remove();
+                }
+
+                showToast(`✓ Pesanan #${code} berhasil diperbarui di database: ${nextLabel}`, 'success');
+            })
+            .catch(err => {
+                currentBtn.disabled = false;
+                alert('Gagal memperbarui status di database.');
+            });
         });
     });
 

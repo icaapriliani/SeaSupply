@@ -11,20 +11,24 @@ Route::get('/', fn() => redirect()->route('catalog.index'));
 Route::prefix('catalog')->name('catalog.')->group(function () {
     Route::get('/',             [CatalogController::class, 'index'])->name('index');
     Route::get('/product/{id}', [CatalogController::class, 'show'])->name('show');
+    Route::post('/order',       [CatalogController::class, 'storeOrder'])->name('order.store');
 });
 
 // ── Owner Routes (Wireframe C — Dashboard Pemilik Usaha) ───────
 Route::prefix('owner')->name('owner.')->group(function () {
-    Route::get('/dashboard', [OwnerController::class, 'dashboard'])->name('dashboard');
-    Route::get('/products',  [OwnerController::class, 'products'])->name('products');
-    Route::get('/orders',    [OwnerController::class, 'orders'])->name('orders');
-    Route::get('/finance',   [OwnerController::class, 'finance'])->name('finance');
-    Route::get('/employees', [OwnerController::class, 'employees'])->name('employees');
+    Route::get('/dashboard',                  [OwnerController::class, 'dashboard'])->name('dashboard');
+    Route::get('/products',                   [OwnerController::class, 'products'])->name('products');
+    Route::post('/products',                  [OwnerController::class, 'storeProduct'])->name('products.store');
+    Route::get('/orders',                     [OwnerController::class, 'orders'])->name('orders');
+    Route::patch('/orders/{orderCode}/status', [OwnerController::class, 'updateOrderStatus'])->name('orders.update_status');
+    Route::get('/finance',                    [OwnerController::class, 'finance'])->name('finance');
+    Route::get('/employees',                  [OwnerController::class, 'employees'])->name('employees');
 });
 
 // ── Employee Routes (Wireframe D — Operasional Pegawai) ────────
 Route::prefix('employee')->name('employee.')->group(function () {
-    Route::get('/orders',   [EmployeeController::class, 'orders'])->name('orders');
-    Route::get('/summary',  [EmployeeController::class, 'summary'])->name('summary');
-    Route::get('/products', [EmployeeController::class, 'products'])->name('products');
+    Route::get('/orders',                     [EmployeeController::class, 'orders'])->name('orders');
+    Route::patch('/orders/{orderCode}/status', [EmployeeController::class, 'updateOrderStatus'])->name('orders.update_status');
+    Route::get('/summary',                    [EmployeeController::class, 'summary'])->name('summary');
+    Route::get('/products',                   [EmployeeController::class, 'products'])->name('products');
 });

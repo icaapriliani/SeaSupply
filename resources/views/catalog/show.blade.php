@@ -368,21 +368,54 @@
             btnLanjut.disabled = true;
             btnLanjut.textContent = 'Memproses...';
 
-            // TODO: POST /api/v1/orders setelah backend siap
-            // Simulasi sukses untuk tampilan frontend
-            setTimeout(function () {
-                closeModal();
-                // Tampilkan toast sukses
-                const toast = document.createElement('div');
-                toast.className = 'ss-toast ss-toast--success';
-                toast.setAttribute('role', 'alert');
-                toast.innerHTML = '✓ Pesanan berhasil dibuat! Stok: ' + qty + ' ' + unit;
-                document.getElementById('toastContainer').appendChild(toast);
-                setTimeout(() => toast.remove(), 4000);
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+            fetch('{{ route('catalog.order.store') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || ''
+                },
+                body: JSON.stringify({
+                    product_id: {{ $product['id'] }},
+                    quantity: qty
+                })
+            })
+            .then(res => res.json().then(data => ({ status: res.status, body: data })))
+            .then(({ status, body }) => {
+                closeModal();
                 btnLanjut.disabled = false;
                 btnLanjut.textContent = 'Ya, lanjutkan';
-            }, 900);
+
+                if (status === 201) {
+                    const toast = document.createElement('div');
+                    toast.className = 'ss-toast ss-toast--success';
+                    toast.setAttribute('role', 'alert');
+                    toast.innerHTML = '✓ Pesanan #' + body.data.order_code + ' berhasil dibuat! Sisa stok: ' + body.data.remaining_stock + ' ' + unit;
+                    document.getElementById('toastContainer').appendChild(toast);
+                    setTimeout(() => toast.remove(), 4500);
+
+                    // Update UI jika stok berubah
+                    if (body.data.remaining_stock === 0) {
+                        setTimeout(() => window.location.reload(), 1500);
+                    }
+                } else {
+                    const errMsg = body.error?.message || 'Gagal memproses pesanan.';
+                    const toast = document.createElement('div');
+                    toast.className = 'ss-toast ss-toast--danger';
+                    toast.setAttribute('role', 'alert');
+                    toast.innerHTML = '⚠️ ' + errMsg;
+                    document.getElementById('toastContainer').appendChild(toast);
+                    setTimeout(() => toast.remove(), 4500);
+                }
+            })
+            .catch(err => {
+                closeModal();
+                btnLanjut.disabled = false;
+                btnLanjut.textContent = 'Ya, lanjutkan';
+                alert('Terjadi kesalahan jaringan.');
+            });
         });
     }
 
