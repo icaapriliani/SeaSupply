@@ -8,7 +8,6 @@ use App\Models\Product;
 use App\Models\Order;
 use App\Models\Category;
 use App\Models\StoreMembership;
-use App\Models\User;
 
 class OwnerController extends Controller
 {
@@ -74,6 +73,35 @@ class OwnerController extends Controller
     }
 
     /**
+     * GET /owner/products (Daftar Produk Toko Lengkap)
+     */
+    public function products()
+    {
+        $store = $this->getOwnerStore();
+
+        $products = Product::with('category')
+            ->where('store_id', $store->id)
+            ->orderBy('id', 'asc')
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id'          => $p->id,
+                    'name'        => $p->name,
+                    'category'    => $p->category?->name ?? 'Olahan Laut',
+                    'price'       => $p->price,
+                    'unit'        => $p->unit,
+                    'stock'       => $p->stock_quantity,
+                    'is_active'   => $p->is_active,
+                    'emoji'       => $p->emoji ?? '🐟',
+                    'gradient'    => $p->gradient ?? 'linear-gradient(135deg,#D4E8F0,#A8D1E0)',
+                    'description' => $p->description,
+                ];
+            });
+
+        return view('owner.products', compact('products'));
+    }
+
+    /**
      * POST /owner/products (Tambah Produk Baru ke Database)
      */
     public function storeProduct(Request $request)
@@ -121,6 +149,98 @@ class OwnerController extends Controller
     }
 
     /**
+     * PATCH /owner/products/{id} (Edit Produk)
+     */
+    public function updateProduct(Request $request, $id)
+    {
+        $store = $this->getOwnerStore();
+        $product = Product::where('store_id', $store->id)->findOrFail($id);
+
+        $validated = $request->validate([
+            'name'        => 'required|string|max:255',
+            'price'       => 'required|integer|min:0',
+            'stock'       => 'required|integer|min:0',
+            'description' => 'nullable|string',
+        ]);
+
+        $product->update([
+            'name'           => $validated['name'],
+            'price'          => $validated['price'],
+            'stock_quantity' => $validated['stock'],
+            'description'    => $validated['description'] ?? '',
+        ]);
+
+        return response()->json([
+            'data'    => $product,
+            'message' => "Produk '{$product->name}' berhasil diperbarui.",
+        ]);
+    }
+
+    /**
+     * DELETE /owner/products/{id} (Soft Delete / Arsipkan Produk Sesuai Design System)
+     */
+    public function destroyProduct($id)
+    {
+        $store = $this->getOwnerStore();
+        $product = Product::where('store_id', $store->id)->findOrFail($id);
+
+        $name = $product->name;
+        $product->delete(); // Soft delete
+
+        return response()->json([
+            'message' => "Produk '{$name}' berhasil dihapus dari katalog.",
+        ]);
+    }
+
+    /**
+     * GET /owner/orders (Daftar Pesanan Toko Lengkap)
+     */
+    public function orders(Request $request)
+    {
+        $store  = $this->getOwnerStore();
+        $status = $request->input('status', 'all');
+
+        $allOrders = Order::with(['items', 'buyer'])
+            ->where('store_id', $store->id)
+            ->latest()
+            ->get()
+            ->map(function ($o) {
+                $firstItem = $o->items->first();
+                return [
+                    'id'           => $o->id,
+                    'order_code'   => $o->order_code,
+                    'buyer_name'   => $o->recipient_name ?? ($o->buyer?->name ?? 'Pembeli'),
+                    'buyer_phone'  => $o->recipient_phone ?? '0812-3456-7890',
+                    'item_name'    => $firstItem?->product_name_snapshot ?? 'Produk Olahan Laut',
+                    'quantity'     => $firstItem?->quantity ?? 1,
+                    'unit'         => $firstItem?->unit_snapshot ?? 'kg',
+                    'total_amount' => $o->subtotal,
+                    'status'       => $o->status,
+                    'date'         => $o->created_at->format('d M Y, H:i'),
+                ];
+            });
+
+        $counts = [
+            'pending'    => $allOrders->where('status', 'pending')->count(),
+            'processing' => $allOrders->where('status', 'processing')->count(),
+            'shipped'    => $allOrders->where('status', 'shipped')->count(),
+            'completed'  => $allOrders->where('status', 'completed')->count(),
+        ];
+
+        if ($status && $status !== 'all') {
+            $filteredOrders = $allOrders->filter(fn($o) => $o['status'] === $status)->values();
+        } else {
+            $filteredOrders = $allOrders;
+        }
+
+        return view('owner.orders', [
+            'orders'    => $filteredOrders,
+            'allOrders' => $allOrders,
+            'counts'    => $counts,
+        ]);
+    }
+
+    /**
      * PATCH /owner/orders/{orderCode}/status (Update Status Pesanan)
      */
     public function updateOrderStatus(Request $request, $orderCode)
@@ -137,16 +257,6 @@ class OwnerController extends Controller
             'data'    => $order,
             'message' => "Status pesanan #{$order->order_code} berhasil diperbarui menjadi {$order->status}.",
         ]);
-    }
-
-    public function products()
-    {
-        return $this->dashboard();
-    }
-
-    public function orders()
-    {
-        return $this->dashboard();
     }
 
     public function finance()

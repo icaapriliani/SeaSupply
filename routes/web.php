@@ -32,6 +32,8 @@ Route::prefix('owner')->name('owner.')->middleware(['auth', 'store.role:owner'])
     Route::get('/dashboard',                  [OwnerController::class, 'dashboard'])->name('dashboard');
     Route::get('/products',                   [OwnerController::class, 'products'])->name('products');
     Route::post('/products',                  [OwnerController::class, 'storeProduct'])->name('products.store');
+    Route::patch('/products/{id}',            [OwnerController::class, 'updateProduct'])->name('products.update');
+    Route::delete('/products/{id}',           [OwnerController::class, 'destroyProduct'])->name('products.destroy');
     Route::get('/orders',                     [OwnerController::class, 'orders'])->name('orders');
     Route::patch('/orders/{orderCode}/status', [OwnerController::class, 'updateOrderStatus'])->name('orders.update_status');
     Route::get('/finance',                    [OwnerController::class, 'finance'])->name('finance');
