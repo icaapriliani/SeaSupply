@@ -93,20 +93,31 @@
             </li>
         </ul>
 
-        {{-- Role Switcher Shortcuts (Akses Cepat Pengujian) --}}
-        <div style="display:flex;align-items:center;gap:6px;border-left:1px solid var(--color-border);padding-left:12px;">
-            <a href="{{ route('owner.dashboard') }}" 
-               class="ss-btn ss-btn--outline ss-btn--sm" 
-               style="font-size:11px;padding:4px 8px;gap:4px;"
-               title="Buka Dashboard Pemilik Usaha">
-                👑 Owner
-            </a>
-            <a href="{{ route('employee.orders') }}" 
-               class="ss-btn ss-btn--outline ss-btn--sm" 
-               style="font-size:11px;padding:4px 8px;gap:4px;"
-               title="Buka Panel Operasional Pegawai">
-                💼 Pegawai
-            </a>
+        {{-- User Auth / Login Section --}}
+        <div style="display:flex;align-items:center;gap:8px;border-left:1px solid var(--color-border);padding-left:12px;">
+            @auth
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="text-align:right;">
+                        <div style="font-size:12px;font-weight:600;color:var(--color-ink);line-height:1.2;">{{ Auth::user()->name }}</div>
+                        <div style="font-size:10px;color:var(--color-sea-teal);font-weight:500;">
+                            @php
+                                $role = Auth::user()->memberships->first()?->role;
+                            @endphp
+                            {{ $role === 'owner' ? '👑 Owner' : ($role === 'employee' ? '💼 Pegawai' : '🛒 Pembeli') }}
+                        </div>
+                    </div>
+                    <form action="{{ route('logout') }}" method="POST" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="ss-btn ss-btn--outline ss-btn--sm" style="font-size:11px;padding:4px 8px;" title="Keluar">
+                            Keluar
+                        </button>
+                    </form>
+                </div>
+            @else
+                <a href="{{ route('login') }}" class="ss-btn ss-btn--primary ss-btn--sm" style="font-size:12px;padding:6px 12px;">
+                    Masuk
+                </a>
+            @endauth
         </div>
 
     </div>

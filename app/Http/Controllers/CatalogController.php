@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Order;
@@ -204,8 +205,14 @@ class CatalogController extends Controller
     public function orders(Request $request)
     {
         $status = $request->input('status', 'all');
+        $userId = Auth::id();
 
-        $allOrders = Order::with(['items', 'store'])->latest()->get()->map(function ($o) {
+        $query = Order::with(['items', 'store']);
+        if ($userId) {
+            $query->where('buyer_user_id', $userId);
+        }
+
+        $allOrders = $query->latest()->get()->map(function ($o) {
             $firstItem = $o->items->first();
             return [
                 'id'             => $o->id,
