@@ -259,9 +259,76 @@ class OwnerController extends Controller
         ]);
     }
 
-    public function finance()
+    public function finance(Request $request)
     {
-        return $this->dashboard();
+        $store = $this->getOwnerStore();
+        $period = $request->input('period', 'all');
+
+        $query = Order::with('items')->where('store_id', $store->id);
+
+        $now = now();
+        $periodLabel = 'Sepanjang Waktu';
+
+        if ($period === 'today') {
+            $query->whereDate('created_at', $now->toDateString());
+            $periodLabel = 'Hari Ini (' . $now->format('d M Y') . ')';
+        } elseif ($period === 'week') {
+            $query->where('created_at', '>=', $now->copy()->subDays(7));
+            $periodLabel = '7 Hari Terakhir';
+        } elseif ($period === 'month') {
+            $query->where('created_at', '>=', $now->copy()->startOfMonth());
+            $periodLabel = 'Bulan Ini (' . $now->format('M Y') . ')';
+        }
+
+        $orders = $query->get();
+
+        $allOrdersCount = $orders->count();
+        $paidOrders = $orders->where('status', '!=', 'cancelled');
+        $paidOrdersCount = $paidOrders->count();
+        $totalSales = $paidOrders->sum('subtotal');
+        $aov = $paidOrdersCount > 0 ? (int) ($totalSales / $paidOrdersCount) : 0;
+
+        // Hitung total berat/kuantitas & breakdown per produk
+        $productStats = [];
+        $totalWeight = 0;
+
+        foreach ($paidOrders as $order) {
+            foreach ($order->items as $item) {
+                $pName = $item->product_name_snapshot;
+                $totalWeight += $item->quantity;
+
+                if (!isset($productStats[$pName])) {
+                    $productStats[$pName] = [
+                        'name'          => $pName,
+                        'price'         => $item->unit_price_snapshot,
+                        'unit'          => $item->unit_snapshot,
+                        'total_qty'     => 0,
+                        'total_revenue' => 0,
+                    ];
+                }
+
+                $productStats[$pName]['total_qty'] += $item->quantity;
+                $productStats[$pName]['total_revenue'] += $item->line_total;
+            }
+        }
+
+        // Urutkan produk terlaris berdasarkan revenue tertinggi
+        usort($productStats, fn($a, $b) => $b['total_revenue'] <=> $a['total_revenue']);
+
+        $metrics = [
+            'total_sales'         => (int) $totalSales,
+            'paid_orders_count'   => $paidOrdersCount,
+            'all_orders_count'    => $allOrdersCount,
+            'total_weight_kg'     => $totalWeight,
+            'average_order_value' => $aov,
+        ];
+
+        return view('owner.finance', [
+            'metrics'     => $metrics,
+            'topProducts' => array_values($productStats),
+            'periodLabel' => $periodLabel,
+            'period'      => $period,
+        ]);
     }
 
     public function employees()
