@@ -29,7 +29,7 @@
 
     {{-- ── PRODUCT DETAIL CARD ──────────────────────────── --}}
     <div class="ss-surface-card" style="padding:0;overflow:hidden;max-width:900px;margin:0 auto;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;min-height:420px;">
+        <div class="ss-detail-grid">
 
             {{-- Left — Product Image --}}
             <div style="
@@ -243,42 +243,114 @@
 
 </div>
 
-{{-- ── MODAL KONFIRMASI PESANAN ─────────────────────────── --}}
+{{-- ── MODAL KONFIRMASI PESANAN (WIREFRAME B FORM CHECKOUT) ── --}}
 <div class="ss-modal-overlay" id="modalKonfirmasi" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="ss-modal">
+    <div class="ss-modal" style="max-width:480px;max-height:90vh;overflow-y:auto;">
         <h2 class="ss-modal__title" id="modalTitle">
-            <span aria-hidden="true">📋</span> Konfirmasi pesanan
+            <span aria-hidden="true">📋</span> Konfirmasi Pesanan
         </h2>
-        <div class="ss-modal__body">
+        <div class="ss-modal__body" style="margin-bottom:var(--sp-4);">
+
+            {{-- Ringkasan Pesanan --}}
             <div style="
                 background:var(--color-surface);
                 border:1px solid var(--color-border);
                 border-radius:var(--radius-sm);
-                padding:var(--sp-4);
+                padding:var(--sp-3) var(--sp-4);
                 margin-bottom:var(--sp-4);
             ">
-                <div style="display:flex;justify-content:space-between;margin-bottom:var(--sp-2);">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <span style="font-size:var(--fs-label);color:var(--color-muted);">Produk</span>
                     <span style="font-size:var(--fs-label);font-weight:var(--fw-semibold);color:var(--color-ink);">{{ $product['name'] }}</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:var(--sp-2);">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <span style="font-size:var(--fs-label);color:var(--color-muted);">Jumlah</span>
                     <span style="font-size:var(--fs-label);font-weight:var(--fw-semibold);color:var(--color-ink);" id="modalQty">1 {{ $product['unit'] }}</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;padding-top:var(--sp-2);border-top:1px solid var(--color-border);">
-                    <span style="font-size:var(--fs-label);font-weight:var(--fw-semibold);">Total</span>
+                <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--color-border);margin-top:4px;">
+                    <span style="font-size:var(--fs-label);font-weight:var(--fw-semibold);">Total Pembayaran</span>
                     <span style="font-size:16px;font-weight:var(--fw-bold);color:var(--color-ocean-navy);" id="modalTotal">
                         Rp {{ number_format($product['price'], 0, ',', '.') }}
                     </span>
                 </div>
             </div>
-            <p style="font-size:var(--fs-caption);">Lanjutkan dan simpan pesanan ini?</p>
+
+            {{-- Form Informasi Pengiriman --}}
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3);">
+                <div style="font-size:var(--fs-label);font-weight:var(--fw-semibold);color:var(--color-ocean-navy);border-bottom:1px solid var(--color-border);padding-bottom:4px;">
+                    📍 Informasi Penerima & Pengiriman
+                </div>
+
+                {{-- Alert Error Client Side --}}
+                <div id="checkoutErrorBox" class="ss-alert ss-alert--danger" style="display:none;padding:8px 12px;font-size:12px;margin-bottom:0;" role="alert">
+                    <span id="checkoutErrorMessage">Mohon lengkapi data pengiriman.</span>
+                </div>
+
+                {{-- Nama Penerima --}}
+                <div class="ss-input-group">
+                    <label for="checkoutRecipientName" class="ss-label">
+                        Nama Penerima <span style="color:var(--color-danger);">&ast;</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="checkoutRecipientName"
+                        class="ss-input"
+                        placeholder="Nama lengkap penerima"
+                        value="{{ Auth::user()?->name ?? '' }}"
+                        required
+                    >
+                </div>
+
+                {{-- Nomor WhatsApp / Telepon --}}
+                <div class="ss-input-group">
+                    <label for="checkoutRecipientPhone" class="ss-label">
+                        Nomor WhatsApp / Telepon <span style="color:var(--color-danger);">&ast;</span>
+                    </label>
+                    <input
+                        type="tel"
+                        id="checkoutRecipientPhone"
+                        class="ss-input"
+                        placeholder="Contoh: 0812-3456-7890"
+                        value="{{ Auth::user()?->phone ?? '' }}"
+                        required
+                    >
+                </div>
+
+                {{-- Alamat Pengiriman Lengkap --}}
+                <div class="ss-input-group">
+                    <label for="checkoutDeliveryAddress" class="ss-label">
+                        Alamat Pengiriman Lengkap <span style="color:var(--color-danger);">&ast;</span>
+                    </label>
+                    <textarea
+                        id="checkoutDeliveryAddress"
+                        class="ss-input"
+                        rows="2"
+                        style="height:auto;padding-top:8px;padding-bottom:8px;resize:vertical;"
+                        placeholder="Nama jalan, nomor rumah, RT/RW, kelurahan, kecamatan, kota..."
+                        required
+                    ></textarea>
+                </div>
+
+                {{-- Catatan Pesanan --}}
+                <div class="ss-input-group">
+                    <label for="checkoutBuyerNote" class="ss-label">
+                        Catatan Pesanan <span style="color:var(--color-muted);font-weight:400;">(Opsional)</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="checkoutBuyerNote"
+                        class="ss-input"
+                        placeholder='misal: "minta es batu / packing kardus"'
+                    >
+                </div>
+            </div>
+
         </div>
-        <div class="ss-modal__actions">
-            <button class="ss-btn ss-btn--outline" id="btnModalBatal" aria-label="Batalkan dan kembali">
+        <div class="ss-modal__actions" style="margin-top:var(--sp-4);">
+            <button type="button" class="ss-btn ss-btn--outline" id="btnModalBatal" aria-label="Batalkan dan kembali">
                 Kembali
             </button>
-            <button class="ss-btn ss-btn--primary" id="btnModalLanjut" aria-label="Konfirmasi dan buat pesanan">
+            <button type="button" class="ss-btn ss-btn--primary" id="btnModalLanjut" aria-label="Konfirmasi dan buat pesanan">
                 Ya, lanjutkan
             </button>
         </div>
@@ -331,16 +403,27 @@
         });
     }
 
-    // Modal
-    const modal        = document.getElementById('modalKonfirmasi');
-    const btnBuat      = document.getElementById('btnBuatPesanan');
-    const btnBatal     = document.getElementById('btnModalBatal');
-    const btnLanjut    = document.getElementById('btnModalLanjut');
+    // Modal & Checkout Inputs
+    const modal            = document.getElementById('modalKonfirmasi');
+    const btnBuat          = document.getElementById('btnBuatPesanan');
+    const btnBatal         = document.getElementById('btnModalBatal');
+    const btnLanjut        = document.getElementById('btnModalLanjut');
+    const recipientNameInp = document.getElementById('checkoutRecipientName');
+    const recipientPhoneInp= document.getElementById('checkoutRecipientPhone');
+    const deliveryAddrInp  = document.getElementById('checkoutDeliveryAddress');
+    const buyerNoteInp     = document.getElementById('checkoutBuyerNote');
+    const errorBox         = document.getElementById('checkoutErrorBox');
+    const errorMessage     = document.getElementById('checkoutErrorMessage');
 
     function openModal() {
         updateUI();
+        if (errorBox) errorBox.style.display = 'none';
         modal.classList.add('open');
-        modal.querySelector('.ss-btn--primary').focus();
+        if (recipientNameInp && !recipientNameInp.value) {
+            recipientNameInp.focus();
+        } else if (deliveryAddrInp && !deliveryAddrInp.value) {
+            deliveryAddrInp.focus();
+        }
     }
 
     function closeModal() {
@@ -365,6 +448,32 @@
 
     if (btnLanjut) {
         btnLanjut.addEventListener('click', function () {
+            const recipientName   = recipientNameInp ? recipientNameInp.value.trim() : '';
+            const recipientPhone  = recipientPhoneInp ? recipientPhoneInp.value.trim() : '';
+            const deliveryAddress = deliveryAddrInp ? deliveryAddrInp.value.trim() : '';
+            const buyerNote       = buyerNoteInp ? buyerNoteInp.value.trim() : '';
+
+            // Client side validation
+            if (!recipientName) {
+                showError('Mohon isi nama penerima pesanan.');
+                recipientNameInp.focus();
+                return;
+            }
+
+            if (!recipientPhone) {
+                showError('Mohon isi nomor WhatsApp/telepon penerima.');
+                recipientPhoneInp.focus();
+                return;
+            }
+
+            if (!deliveryAddress) {
+                showError('Mohon isi alamat pengiriman lengkap.');
+                deliveryAddrInp.focus();
+                return;
+            }
+
+            if (errorBox) errorBox.style.display = 'none';
+
             btnLanjut.disabled = true;
             btnLanjut.textContent = 'Memproses...';
 
@@ -379,16 +488,21 @@
                 },
                 body: JSON.stringify({
                     product_id: {{ $product['id'] }},
-                    quantity: qty
+                    quantity: qty,
+                    recipient_name: recipientName,
+                    recipient_phone: recipientPhone,
+                    delivery_address: deliveryAddress,
+                    buyer_note: buyerNote
                 })
             })
             .then(res => res.json().then(data => ({ status: res.status, body: data })))
             .then(({ status, body }) => {
-                closeModal();
                 btnLanjut.disabled = false;
                 btnLanjut.textContent = 'Ya, lanjutkan';
 
                 if (status === 201) {
+                    closeModal();
+
                     const toast = document.createElement('div');
                     toast.className = 'ss-toast ss-toast--success';
                     toast.setAttribute('role', 'alert');
@@ -396,12 +510,14 @@
                     document.getElementById('toastContainer').appendChild(toast);
                     setTimeout(() => toast.remove(), 4500);
 
-                    // Update UI jika stok berubah
-                    if (body.data.remaining_stock === 0) {
-                        setTimeout(() => window.location.reload(), 1500);
-                    }
+                    // Arahkan ke halaman riwayat pesanan setelah 1.5 detik
+                    setTimeout(() => {
+                        window.location.href = '{{ route('catalog.orders') }}';
+                    }, 1500);
                 } else {
-                    const errMsg = body.error?.message || 'Gagal memproses pesanan.';
+                    const errMsg = body.error?.message || (body.message ?? 'Gagal memproses pesanan.');
+                    showError(errMsg);
+
                     const toast = document.createElement('div');
                     toast.className = 'ss-toast ss-toast--danger';
                     toast.setAttribute('role', 'alert');
@@ -411,12 +527,20 @@
                 }
             })
             .catch(err => {
-                closeModal();
                 btnLanjut.disabled = false;
                 btnLanjut.textContent = 'Ya, lanjutkan';
-                alert('Terjadi kesalahan jaringan.');
+                showError('Terjadi kesalahan jaringan atau server.');
             });
         });
+    }
+
+    function showError(msg) {
+        if (errorBox && errorMessage) {
+            errorMessage.textContent = msg;
+            errorBox.style.display = 'flex';
+        } else {
+            alert(msg);
+        }
     }
 
     // Init
