@@ -27,7 +27,21 @@
                 @foreach($products as $p)
                 <tr>
                     <td>
-                        <strong style="color:var(--color-ink);">{{ $p['name'] }}</strong>
+                        <div style="display:flex;align-items:center;gap:var(--sp-3);">
+                            @if(!empty($p['image_url']))
+                                <img src="{{ asset('storage/' . $p['image_url']) }}" alt="{{ $p['name'] }}"
+                                     style="width:36px;height:36px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0;border:1px solid var(--color-border);"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div style="display:none;width:36px;height:36px;border-radius:var(--radius-sm);background:{{ $p['gradient'] }};align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
+                                    {{ $p['emoji'] }}
+                                </div>
+                            @else
+                                <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:{{ $p['gradient'] }};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
+                                    {{ $p['emoji'] }}
+                                </div>
+                            @endif
+                            <strong style="color:var(--color-ink);">{{ $p['name'] }}</strong>
+                        </div>
                     </td>
                     <td>{{ $p['category'] }}</td>
                     <td>Rp {{ number_format($p['price'], 0, ',', '.') }} / {{ $p['unit'] }}</td>

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\Store;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\StoreMembership;
 
 class EmployeeController extends Controller
 {
@@ -14,11 +17,31 @@ class EmployeeController extends Controller
         return Store::firstOrCreate(['name' => 'Usaha Pak Hasan']);
     }
 
+    private function checkEmployeePermission(string $permission): void
+    {
+        $user = Auth::user();
+        if (!$user) {
+            abort(401, 'Silakan masuk terlebih dahulu.');
+        }
+
+        $store = $this->getStore();
+        $membership = StoreMembership::where('store_id', $store->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$membership || !$membership->hasPermission($permission)) {
+            abort(403, "Akses Ditolak: Anda tidak memiliki izin '{$permission}'.");
+        }
+    }
+
     /**
      * GET /employee/orders (Wireframe D)
      */
     public function orders(Request $request)
     {
+        $this->checkEmployeePermission('orders.read');
+
         $store  = $this->getStore();
         $status = $request->input('status', 'all');
 
@@ -48,6 +71,9 @@ class EmployeeController extends Controller
         $counts = [
             'pending'    => Order::where('store_id', $store->id)->where('status', 'pending')->count(),
             'processing' => Order::where('store_id', $store->id)->where('status', 'processing')->count(),
+            'shipped'    => Order::where('store_id', $store->id)->where('status', 'shipped')->count(),
+            'completed'  => Order::where('store_id', $store->id)->where('status', 'completed')->count(),
+            'cancelled'  => Order::where('store_id', $store->id)->where('status', 'cancelled')->count(),
         ];
 
         return view('employee.orders', [
@@ -57,22 +83,89 @@ class EmployeeController extends Controller
     }
 
     /**
-     * PATCH /employee/orders/{orderCode}/status
+     * PATCH /employee/orders/{orderCode}/status (Update Status Pesanan dengan Logika Pengembalian Stok)
      */
     public function updateOrderStatus(Request $request, $orderCode)
     {
+        $user = Auth::user();
+        $store = $this->getStore();
+        $membership = StoreMembership::where('store_id', $store->id)
+            ->where('user_id', $user?->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$membership || !$membership->hasPermission('orders.update_status')) {
+            return response()->json([
+                'error' => [
+                    'code'    => 'FORBIDDEN',
+                    'message' => 'Akses Ditolak: Anda tidak memiliki izin untuk memperbarui status pesanan (orders.update_status).',
+                ]
+            ], 403);
+        }
+
         $validated = $request->validate([
             'status' => 'required|in:pending,processing,shipped,completed,cancelled',
         ]);
 
-        $order = Order::where('order_code', $orderCode)->firstOrFail();
-        $order->status = $validated['status'];
-        $order->save();
+        $order = Order::with('items')->where('store_id', $store->id)->where('order_code', $orderCode)->firstOrFail();
 
-        return response()->json([
-            'data'    => $order,
-            'message' => "Status pesanan #{$order->order_code} berhasil diperbarui menjadi {$order->status}.",
-        ]);
+        return DB::transaction(function () use ($order, $validated) {
+            $oldStatus = $order->status;
+            $newStatus = $validated['status'];
+
+            // Logika Pengembalian Stok pada Pembatalan:
+            // Jika status pesanan diubah menjadi cancelled (Dibatalkan) oleh Pegawai, kembalikan kuantitas stok ke tabel products.
+            if ($oldStatus !== 'cancelled' && $newStatus === 'cancelled') {
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::withTrashed()->lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $product->stock_quantity += $item->quantity;
+                            $product->save();
+                        }
+                    }
+                }
+            }
+            // Jika pesanan yang tadinya cancelled diaktifkan kembali
+            elseif ($oldStatus === 'cancelled' && $newStatus !== 'cancelled') {
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::withTrashed()->lockForUpdate()->find($item->product_id);
+                        if ($product && $product->stock_quantity < $item->quantity) {
+                            return response()->json([
+                                'error' => [
+                                    'code'    => 'INSUFFICIENT_STOCK',
+                                    'message' => "Stok produk '{$product->name}' tidak mencukupi untuk mengaktifkan kembali pesanan.",
+                                ]
+                            ], 400);
+                        }
+                    }
+                }
+
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::withTrashed()->lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $product->stock_quantity = max(0, $product->stock_quantity - $item->quantity);
+                            $product->save();
+                        }
+                    }
+                }
+            }
+
+            $order->status = $newStatus;
+            $order->save();
+
+            $msg = "Status pesanan #{$order->order_code} berhasil diperbarui menjadi {$order->status}.";
+            if ($oldStatus !== 'cancelled' && $newStatus === 'cancelled') {
+                $msg .= " Kuantitas stok produk telah dikembalikan otomatis ke katalog.";
+            }
+
+            return response()->json([
+                'data'    => $order,
+                'message' => $msg,
+            ]);
+        });
     }
 
     /**
@@ -80,6 +173,8 @@ class EmployeeController extends Controller
      */
     public function summary()
     {
+        $this->checkEmployeePermission('orders.read');
+
         $store = $this->getStore();
 
         $pendingCount    = Order::where('store_id', $store->id)->where('status', 'pending')->count();
@@ -94,6 +189,8 @@ class EmployeeController extends Controller
      */
     public function products()
     {
+        $this->checkEmployeePermission('products.read');
+
         $store = $this->getStore();
 
         $products = Product::with('category')
@@ -102,12 +199,15 @@ class EmployeeController extends Controller
             ->get()
             ->map(function ($p) {
                 return [
-                    'id'       => $p->id,
-                    'name'     => $p->name,
-                    'category' => $p->category?->name ?? 'Olahan Laut',
-                    'price'    => $p->price,
-                    'unit'     => $p->unit,
-                    'stock'    => $p->stock_quantity,
+                    'id'        => $p->id,
+                    'name'      => $p->name,
+                    'category'  => $p->category?->name ?? 'Olahan Laut',
+                    'price'     => $p->price,
+                    'unit'      => $p->unit,
+                    'stock'     => $p->stock_quantity,
+                    'image_url' => $p->image_url,
+                    'emoji'     => $p->emoji ?? '🐟',
+                    'gradient'  => $p->gradient ?? 'linear-gradient(135deg,#D4E8F0,#A8D1E0)',
                 ];
             });
 
