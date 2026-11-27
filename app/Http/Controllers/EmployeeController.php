@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use App\Models\Store;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\StoreMembership;
 
@@ -76,10 +77,105 @@ class EmployeeController extends Controller
             'cancelled'  => Order::where('store_id', $store->id)->where('status', 'cancelled')->count(),
         ];
 
+        $products = Product::where('store_id', $store->id)
+            ->where('is_active', true)
+            ->orderBy('name', 'asc')
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id'    => $p->id,
+                    'name'  => $p->name,
+                    'price' => $p->price,
+                    'unit'  => $p->unit,
+                    'stock' => $p->stock_quantity,
+                ];
+            });
+
         return view('employee.orders', [
-            'orders' => $allOrders,
-            'counts' => $counts,
+            'orders'   => $allOrders,
+            'counts'   => $counts,
+            'products' => $products,
         ]);
+    }
+
+    /**
+     * POST /employee/orders/quick-sale (Kasir Cepat / Catat Penjualan Langsung Offline)
+     */
+    public function storeQuickSale(Request $request)
+    {
+        $user = Auth::user();
+        $store = $this->getStore();
+        $membership = StoreMembership::where('store_id', $store->id)
+            ->where('user_id', $user?->id)
+            ->where('status', 'active')
+            ->first();
+
+        if (!$membership || !$membership->hasPermission('orders.update_status')) {
+            return response()->json([
+                'error' => [
+                    'code'    => 'FORBIDDEN',
+                    'message' => 'Akses Ditolak: Anda tidak memiliki izin untuk mencatat penjualan langsung.',
+                ]
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'product_id'     => 'required|exists:products,id',
+            'quantity'       => 'required|integer|min:1',
+            'buyer_name'     => 'nullable|string|max:100',
+            'buyer_phone'    => 'nullable|string|max:30',
+            'payment_method' => 'nullable|string|max:50',
+            'cash_received'  => 'nullable|integer|min:0',
+        ]);
+
+        return DB::transaction(function () use ($validated, $store, $user) {
+            $product = Product::where('store_id', $store->id)->lockForUpdate()->findOrFail($validated['product_id']);
+
+            if (!$product->is_active || $product->stock_quantity < $validated['quantity']) {
+                return response()->json([
+                    'error' => [
+                        'code'    => 'INSUFFICIENT_STOCK',
+                        'message' => "Stok produk '{$product->name}' tidak mencukupi (tersedia: {$product->stock_quantity} {$product->unit}).",
+                    ]
+                ], 409);
+            }
+
+            $product->stock_quantity -= $validated['quantity'];
+            $product->save();
+
+            $subtotal = $product->price * $validated['quantity'];
+            $orderCode = 'SS-POS-' . str_pad((string) (Order::max('id') + 1), 3, '0', STR_PAD_LEFT);
+            $buyerName = trim(strip_tags($validated['buyer_name'] ?? '')) ?: 'Pembeli Langsung (Tunai)';
+            $buyerPhone = trim(strip_tags($validated['buyer_phone'] ?? '')) ?: '-';
+            $method = trim(strip_tags($validated['payment_method'] ?? 'Tunai di Tempat'));
+
+            $order = Order::create([
+                'order_code'       => $orderCode,
+                'store_id'         => $store->id,
+                'buyer_user_id'    => $user?->id,
+                'status'           => 'completed',
+                'subtotal'         => $subtotal,
+                'recipient_name'   => $buyerName,
+                'recipient_phone'  => $buyerPhone,
+                'delivery_address' => 'Penjualan Langsung di Toko (Offline)',
+                'buyer_note'       => "Kasir Cepat ({$method}) oleh {$user?->name}",
+            ]);
+
+            OrderItem::create([
+                'order_id'              => $order->id,
+                'product_id'            => $product->id,
+                'product_name_snapshot' => $product->name,
+                'unit_price_snapshot'   => $product->price,
+                'unit_snapshot'         => $product->unit,
+                'quantity'              => $validated['quantity'],
+                'line_total'            => $subtotal,
+            ]);
+
+            return response()->json([
+                'data'    => $order,
+                'message' => "Penjualan langsung #{$orderCode} berhasil dicatat (Rp " . number_format($subtotal, 0, ',', '.') . ").",
+            ], 201);
+        });
     }
 
     /**

@@ -70,6 +70,20 @@
                 </a>
             </li>
             <li>
+                <a href="{{ route('cart.index') }}"
+                   class="ss-nav__link ss-nav__cart-link {{ request()->routeIs('cart.*') ? 'active' : '' }}"
+                   aria-label="Keranjang Belanja">
+                    <span class="ss-nav__link-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                        </svg>
+                    </span>
+                    <span>Keranjang</span>
+                    <span class="ss-cart-badge" id="navCartBadge" style="display:none;">0</span>
+                </a>
+            </li>
+            <li>
                 <a href="{{ route('catalog.orders') }}" 
                    class="ss-nav__link {{ request()->routeIs('catalog.orders*') ? 'active' : '' }}" 
                    aria-label="Pesanan saya">
@@ -109,6 +123,13 @@
 
         {{-- User Auth / Login Section --}}
         <div class="ss-nav__auth" style="display:flex;align-items:center;gap:8px;border-left:1px solid var(--color-border);padding-left:12px;">
+            <a href="{{ route('cart.index') }}"
+               class="ss-btn ss-btn--outline ss-btn--sm ss-nav__cart-link ss-mobile-top-cart"
+               id="mobileTopCartBtn"
+               style="padding:6px 10px;position:relative;"
+               aria-label="Buka keranjang">
+                🛒 <span class="ss-cart-badge" id="topBarCartBadge" style="display:none;top:-6px;right:-6px;">0</span>
+            </a>
             @auth
                 <div style="display:flex;align-items:center;gap:8px;">
                     <a href="{{ route('profile.edit') }}" style="text-align:right;text-decoration:none;" title="Buka profil akun">
@@ -148,6 +169,14 @@
         </svg>
         <span>Beranda</span>
     </a>
+    <a href="{{ route('cart.index') }}" class="ss-mobile-nav__item {{ request()->routeIs('cart.*') ? 'active' : '' }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+        </svg>
+        <span>Keranjang</span>
+        <span class="ss-cart-badge ss-cart-badge--mobile" id="mobileCartBadge" style="display:none;">0</span>
+    </a>
     <a href="{{ route('catalog.orders') }}" class="ss-mobile-nav__item {{ request()->routeIs('catalog.orders*') ? 'active' : '' }}">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
@@ -186,6 +215,106 @@
 
 {{-- ── TOAST CONTAINER ─────────────────────────────────────── --}}
 <div class="ss-toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+(function () {
+    const STORAGE_KEY = 'seasupply_cart_v1';
+
+    function readCart() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function writeCart(items) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        syncBadges();
+        window.dispatchEvent(new CustomEvent('seasupply:cart-updated', { detail: { items } }));
+    }
+
+    function getTotalCount() {
+        return readCart().reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0);
+    }
+
+    function syncBadges() {
+        const count = getTotalCount();
+        ['navCartBadge', 'mobileCartBadge', 'topBarCartBadge'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (count > 0) {
+                el.textContent = count > 99 ? '99+' : String(count);
+                el.style.display = 'inline-flex';
+            } else {
+                el.style.display = 'none';
+            }
+        });
+    }
+
+    window.SeaSupplyCart = {
+        getItems: readCart,
+        saveItems: writeCart,
+        getTotalCount: getTotalCount,
+        syncBadges: syncBadges,
+        addItem: function (product, qty = 1) {
+            const items = readCart();
+            const addQty = Math.max(1, parseInt(qty, 10) || 1);
+            const maxStock = parseInt(product.stock, 10) || 99;
+            const idx = items.findIndex(i => Number(i.id) === Number(product.id));
+
+            if (idx >= 0) {
+                items[idx].quantity = Math.min(maxStock, (parseInt(items[idx].quantity, 10) || 0) + addQty);
+                items[idx].stock = maxStock;
+                items[idx].price = parseInt(product.price, 10);
+            } else {
+                items.push({
+                    id: Number(product.id),
+                    name: product.name,
+                    category: product.category || 'Olahan Laut',
+                    store_name: product.store_name || 'Usaha Pak Hasan',
+                    price: parseInt(product.price, 10),
+                    unit: product.unit || 'kg',
+                    stock: maxStock,
+                    emoji: product.emoji || '🐟',
+                    gradient: product.gradient || 'linear-gradient(135deg,#D4E8F0,#A8D1E0)',
+                    quantity: Math.min(maxStock, addQty)
+                });
+            }
+
+            writeCart(items);
+            return items;
+        },
+        updateQty: function (productId, delta) {
+            const items = readCart();
+            const idx = items.findIndex(i => Number(i.id) === Number(productId));
+            if (idx < 0) return items;
+
+            const maxStock = parseInt(items[idx].stock, 10) || 99;
+            const nextQty = (parseInt(items[idx].quantity, 10) || 1) + delta;
+            if (nextQty <= 0) {
+                items.splice(idx, 1);
+            } else {
+                items[idx].quantity = Math.min(maxStock, nextQty);
+            }
+            writeCart(items);
+            return items;
+        },
+        removeItem: function (productId) {
+            const items = readCart().filter(i => Number(i.id) !== Number(productId));
+            writeCart(items);
+            return items;
+        },
+        clear: function () {
+            writeCart([]);
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', syncBadges);
+})();
+</script>
 
 @stack('scripts')
 </body>

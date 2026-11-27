@@ -184,12 +184,20 @@
                 </div>
 
                 {{-- Footer CTA --}}
-                <div class="ss-card__footer">
+                <div class="ss-card__footer" style="display:flex;gap:6px;">
                     @if($product['is_available'])
                     <a href="{{ route('catalog.show', $product['id']) }}"
-                       class="ss-btn ss-btn--primary ss-btn--full">
-                        Lihat detail
+                       class="ss-btn ss-btn--primary ss-btn--sm"
+                       style="flex:1;">
+                        Detail
                     </a>
+                    <button type="button"
+                            class="ss-btn ss-btn--outline ss-btn--sm btn-add-to-cart"
+                            data-product="{{ json_encode($product) }}"
+                            aria-label="Tambah {{ $product['name'] }} ke keranjang"
+                            title="Tambah ke Keranjang">
+                        + 🛒
+                    </button>
                     @else
                     <button class="ss-btn ss-btn--disabled ss-btn--full" disabled aria-disabled="true">
                         Stok Habis
@@ -333,6 +341,21 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
     }
+
+    // ── TAMBAH KE KERANJANG DARI KATALOG ─────────────────────────────────
+    document.querySelectorAll('.btn-add-to-cart').forEach(btn => {
+        btn.addEventListener('click', function () {
+            if (!window.SeaSupplyCart) return;
+            const prod = JSON.parse(this.dataset.product);
+            window.SeaSupplyCart.addItem(prod, 1);
+
+            const toast = document.createElement('div');
+            toast.className = 'ss-toast ss-toast--success';
+            toast.textContent = `✓ "${prod.name}" ditambahkan ke keranjang.`;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        });
+    });
 });
 </script>
 @endpush

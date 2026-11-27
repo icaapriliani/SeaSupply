@@ -153,18 +153,24 @@
                 @endif
 
                 {{-- Action Buttons --}}
-                <div style="display:flex;gap:var(--sp-3);margin-top:auto;">
+                <div style="display:flex;gap:var(--sp-3);margin-top:auto;flex-wrap:wrap;">
                     @if($product['is_available'])
+                    <button class="ss-btn ss-btn--outline"
+                            id="btnAddShowToCart"
+                            style="flex:1;min-width:150px;"
+                            aria-label="Tambah {{ $product['name'] }} ke keranjang">
+                        🛒 + Keranjang
+                    </button>
                     <button class="ss-btn ss-btn--primary"
                             id="btnBuatPesanan"
-                            style="flex:1;"
+                            style="flex:1;min-width:150px;"
                             aria-label="Buat pesanan untuk {{ $product['name'] }}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                             <polyline points="14 2 14 8 20 8"/>
                             <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
                         </svg>
-                        Buat pesanan
+                        Beli langsung
                     </button>
                     @else
                     <button class="ss-btn ss-btn--disabled" style="flex:1;" disabled aria-disabled="true">
@@ -541,6 +547,19 @@
         } else {
             alert(msg);
         }
+    }
+
+    const btnAddCart = document.getElementById('btnAddShowToCart');
+    if (btnAddCart) {
+        btnAddCart.addEventListener('click', function () {
+            if (!window.SeaSupplyCart) return;
+            window.SeaSupplyCart.addItem(@json($product), qty);
+            const toast = document.createElement('div');
+            toast.className = 'ss-toast ss-toast--success';
+            toast.innerHTML = `✓ ${qty} ${unit} <strong>{{ $product['name'] }}</strong> masuk ke keranjang.`;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => toast.remove(), 3200);
+        });
     }
 
     // Init
