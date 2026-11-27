@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use App\Models\Store;
 use App\Models\Product;
 use App\Models\Order;
 use App\Models\Category;
 use App\Models\StoreMembership;
+use App\Models\User;
 
 class OwnerController extends Controller
 {
@@ -92,6 +96,7 @@ class OwnerController extends Controller
                     'unit'        => $p->unit,
                     'stock'       => $p->stock_quantity,
                     'is_active'   => $p->is_active,
+                    'image_url'   => $p->image_url,
                     'emoji'       => $p->emoji ?? '🐟',
                     'gradient'    => $p->gradient ?? 'linear-gradient(135deg,#D4E8F0,#A8D1E0)',
                     'description' => $p->description,
@@ -102,7 +107,7 @@ class OwnerController extends Controller
     }
 
     /**
-     * POST /owner/products (Tambah Produk Baru ke Database)
+     * POST /owner/products (Tambah Produk Baru ke Database dengan Upload Foto & Sanitasi XSS)
      */
     public function storeProduct(Request $request)
     {
@@ -115,7 +120,13 @@ class OwnerController extends Controller
             'price'       => 'required|integer|min:0',
             'stock'       => 'required|integer|min:0',
             'description' => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
+
+        // Sanitasi input form produk untuk mencegah celah keamanan XSS
+        $cleanName        = strip_tags(trim($validated['name']));
+        $cleanUnit        = strip_tags(trim($validated['unit']));
+        $cleanDescription = isset($validated['description']) ? strip_tags(trim($validated['description'])) : '';
 
         $category = Category::where('name', $validated['category'])->first()
             ?? Category::first();
@@ -129,14 +140,21 @@ class OwnerController extends Controller
             'Kepiting'     => '🦞',
         ];
 
+        // Logic penyimpanan file foto produk ke storage/app/public/products
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('products', 'public');
+        }
+
         $product = Product::create([
             'store_id'       => $store->id,
             'category_id'    => $category->id,
-            'name'           => $validated['name'],
-            'description'    => $validated['description'] ?? '',
+            'name'           => $cleanName,
+            'description'    => $cleanDescription,
             'price'          => $validated['price'],
-            'unit'           => $validated['unit'] ?? 'kg',
+            'unit'           => $cleanUnit ?: 'kg',
             'stock_quantity' => $validated['stock'],
+            'image_url'      => $imagePath,
             'emoji'          => $emojiMap[$validated['category']] ?? '🐟',
             'gradient'       => 'linear-gradient(135deg,#D4E8F0,#A8D1E0)',
             'is_active'      => true,
@@ -149,7 +167,7 @@ class OwnerController extends Controller
     }
 
     /**
-     * PATCH /owner/products/{id} (Edit Produk)
+     * PATCH/POST /owner/products/{id} (Edit Produk dengan Upload Foto Baru & Sanitasi XSS)
      */
     public function updateProduct(Request $request, $id)
     {
@@ -161,14 +179,32 @@ class OwnerController extends Controller
             'price'       => 'required|integer|min:0',
             'stock'       => 'required|integer|min:0',
             'description' => 'nullable|string',
+            'image'       => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
-        $product->update([
-            'name'           => $validated['name'],
+        // Sanitasi input teks untuk mencegah celah keamanan XSS
+        $cleanName        = strip_tags(trim($validated['name']));
+        $cleanDescription = isset($validated['description']) ? strip_tags(trim($validated['description'])) : '';
+
+        $updateData = [
+            'name'           => $cleanName,
             'price'          => $validated['price'],
             'stock_quantity' => $validated['stock'],
-            'description'    => $validated['description'] ?? '',
-        ]);
+            'description'    => $cleanDescription,
+        ];
+
+        // Jika ada unggahan gambar baru, simpan file baru dan hapus file lama
+        if ($request->hasFile('image')) {
+            $newImagePath = $request->file('image')->store('products', 'public');
+
+            if ($product->image_url && Storage::disk('public')->exists($product->image_url)) {
+                Storage::disk('public')->delete($product->image_url);
+            }
+
+            $updateData['image_url'] = $newImagePath;
+        }
+
+        $product->update($updateData);
 
         return response()->json([
             'data'    => $product,
@@ -241,7 +277,7 @@ class OwnerController extends Controller
     }
 
     /**
-     * PATCH /owner/orders/{orderCode}/status (Update Status Pesanan)
+     * PATCH /owner/orders/{orderCode}/status (Update Status Pesanan dengan Logika Pengembalian Stok)
      */
     public function updateOrderStatus(Request $request, $orderCode)
     {
@@ -249,14 +285,68 @@ class OwnerController extends Controller
             'status' => 'required|in:pending,processing,shipped,completed,cancelled',
         ]);
 
-        $order = Order::where('order_code', $orderCode)->firstOrFail();
-        $order->status = $validated['status'];
-        $order->save();
+        $store = $this->getOwnerStore();
+        $order = Order::with('items')->where('store_id', $store->id)->where('order_code', $orderCode)->firstOrFail();
 
-        return response()->json([
-            'data'    => $order,
-            'message' => "Status pesanan #{$order->order_code} berhasil diperbarui menjadi {$order->status}.",
-        ]);
+        return DB::transaction(function () use ($order, $validated) {
+            $oldStatus = $order->status;
+            $newStatus = $validated['status'];
+
+            // Logika Pengembalian Stok pada Pembatalan:
+            // Jika status pesanan diubah menjadi cancelled (Dibatalkan), kembalikan kuantitas stok ke tabel products.
+            if ($oldStatus !== 'cancelled' && $newStatus === 'cancelled') {
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::withTrashed()->lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $product->stock_quantity += $item->quantity;
+                            $product->save();
+                        }
+                    }
+                }
+            }
+            // Jika pesanan yang tadinya cancelled diaktifkan kembali
+            elseif ($oldStatus === 'cancelled' && $newStatus !== 'cancelled') {
+                // Periksa apakah stok mencukupi
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::withTrashed()->lockForUpdate()->find($item->product_id);
+                        if ($product && $product->stock_quantity < $item->quantity) {
+                            return response()->json([
+                                'error' => [
+                                    'code'    => 'INSUFFICIENT_STOCK',
+                                    'message' => "Stok produk '{$product->name}' tidak mencukupi untuk mengaktifkan kembali pesanan.",
+                                ]
+                            ], 400);
+                        }
+                    }
+                }
+
+                // Kurangi stok kembali
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::withTrashed()->lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $product->stock_quantity = max(0, $product->stock_quantity - $item->quantity);
+                            $product->save();
+                        }
+                    }
+                }
+            }
+
+            $order->status = $newStatus;
+            $order->save();
+
+            $msg = "Status pesanan #{$order->order_code} berhasil diperbarui menjadi {$order->status}.";
+            if ($oldStatus !== 'cancelled' && $newStatus === 'cancelled') {
+                $msg .= " Kuantitas stok produk telah dikembalikan otomatis ke katalog.";
+            }
+
+            return response()->json([
+                'data'    => $order,
+                'message' => $msg,
+            ]);
+        });
     }
 
     public function finance(Request $request)
@@ -338,19 +428,124 @@ class OwnerController extends Controller
         $memberships = StoreMembership::with('user')
             ->where('store_id', $store->id)
             ->where('role', 'employee')
+            ->latest()
             ->get();
 
         $employees = $memberships->map(function ($m) {
             return [
                 'id'          => $m->id,
+                'user_id'     => $m->user_id,
                 'name'        => $m->user?->name ?? 'Pegawai',
                 'email'       => $m->user?->email ?? '-',
                 'role'        => 'Staf Operasional',
                 'permissions' => $m->permissions ?? ['orders.read'],
-                'status'      => ucfirst($m->status),
+                'status'      => $m->status,
+                'created_at'  => $m->created_at?->format('d M Y') ?? '-',
             ];
         });
 
         return view('owner.employees', compact('employees'));
+    }
+
+    /**
+     * POST /owner/employees (Owner Menambah Pegawai Baru)
+     */
+    public function storeEmployee(Request $request)
+    {
+        $store = $this->getOwnerStore();
+
+        $validated = $request->validate([
+            'name'          => 'required|string|max:255',
+            'email'         => 'required|email|max:255|unique:users,email',
+            'password'      => 'required|string|min:6',
+            'permissions'   => 'nullable|array',
+            'permissions.*' => 'string|in:orders.read,orders.update_status,products.read',
+        ]);
+
+        $cleanName  = strip_tags(trim($validated['name']));
+        $cleanEmail = trim(strtolower($validated['email']));
+
+        $user = User::create([
+            'name'     => $cleanName,
+            'email'    => $cleanEmail,
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        $permissions = $validated['permissions'] ?? ['orders.read'];
+        if (empty($permissions)) {
+            $permissions = ['orders.read'];
+        }
+
+        $membership = StoreMembership::create([
+            'store_id'    => $store->id,
+            'user_id'     => $user->id,
+            'role'        => 'employee',
+            'status'      => 'active',
+            'permissions' => array_values($permissions),
+        ]);
+
+        return response()->json([
+            'data' => [
+                'id'          => $membership->id,
+                'name'        => $user->name,
+                'email'       => $user->email,
+                'role'        => 'Staf Operasional',
+                'permissions' => $membership->permissions,
+                'status'      => $membership->status,
+            ],
+            'message' => "Pegawai '{$user->name}' berhasil ditambahkan ke toko.",
+        ], 201);
+    }
+
+    /**
+     * PATCH /owner/employees/{id} (Update Hak Akses & Status Pegawai)
+     */
+    public function updateEmployee(Request $request, $id)
+    {
+        $store = $this->getOwnerStore();
+        $membership = StoreMembership::with('user')
+            ->where('store_id', $store->id)
+            ->where('role', 'employee')
+            ->findOrFail($id);
+
+        $validated = $request->validate([
+            'permissions'   => 'nullable|array',
+            'permissions.*' => 'string|in:orders.read,orders.update_status,products.read',
+            'status'        => 'nullable|in:active,inactive',
+        ]);
+
+        if (isset($validated['permissions'])) {
+            $membership->permissions = array_values($validated['permissions']);
+        }
+
+        if (isset($validated['status'])) {
+            $membership->status = $validated['status'];
+        }
+
+        $membership->save();
+
+        return response()->json([
+            'data'    => $membership,
+            'message' => "Hak akses untuk pegawai '{$membership->user?->name}' berhasil diperbarui.",
+        ]);
+    }
+
+    /**
+     * DELETE /owner/employees/{id} (Hapus Pegawai dari Toko)
+     */
+    public function destroyEmployee($id)
+    {
+        $store = $this->getOwnerStore();
+        $membership = StoreMembership::with('user')
+            ->where('store_id', $store->id)
+            ->where('role', 'employee')
+            ->findOrFail($id);
+
+        $employeeName = $membership->user?->name ?? 'Pegawai';
+        $membership->delete();
+
+        return response()->json([
+            'message' => "Pegawai '{$employeeName}' berhasil dihapus dari daftar pegawai toko.",
+        ]);
     }
 }

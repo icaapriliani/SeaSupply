@@ -30,7 +30,7 @@
         </div>
 
         {{-- Filter Tab Status --}}
-        <div style="display:flex;gap:6px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <a href="{{ route('employee.orders', ['status' => 'all']) }}" 
                class="ss-chip {{ !request('status') || request('status') === 'all' ? 'active' : '' }}" style="padding:4px 12px;font-size:11px;">
                 Semua
@@ -43,6 +43,14 @@
                class="ss-chip {{ request('status') === 'processing' ? 'active' : '' }}" style="padding:4px 12px;font-size:11px;">
                 Diproses ({{ $counts['processing'] ?? 0 }})
             </a>
+            <a href="{{ route('employee.orders', ['status' => 'shipped']) }}" 
+               class="ss-chip {{ request('status') === 'shipped' ? 'active' : '' }}" style="padding:4px 12px;font-size:11px;">
+                Dikirim ({{ $counts['shipped'] ?? 0 }})
+            </a>
+            <a href="{{ route('employee.orders', ['status' => 'cancelled']) }}" 
+               class="ss-chip {{ request('status') === 'cancelled' ? 'active' : '' }}" style="padding:4px 12px;font-size:11px;">
+                Dibatalkan ({{ $counts['cancelled'] ?? 0 }})
+            </a>
         </div>
     </div>
 
@@ -54,7 +62,7 @@
                     <th style="width:140px;">ID Pesanan</th>
                     <th>Ringkasan</th>
                     <th style="width:140px;">Status</th>
-                    <th style="text-align:right;width:200px;">Tindakan</th>
+                    <th style="text-align:right;width:220px;">Tindakan</th>
                 </tr>
             </thead>
             <tbody>
@@ -99,7 +107,7 @@
 
                     {{-- Tindakan Operasional --}}
                     <td style="text-align:right;">
-                        <div style="display:inline-flex;gap:6px;justify-content:flex-end;">
+                        <div style="display:inline-flex;gap:6px;justify-content:flex-end;" id="actionsContainer-{{ $order['order_code'] }}">
                             @if($order['status'] === 'pending')
                                 <button class="ss-btn ss-btn--primary ss-btn--sm btn-action-step" 
                                         data-code="{{ $order['order_code'] }}"
@@ -148,16 +156,19 @@
 
 </section>
 
-{{-- ── 3. MODAL DETAIL OPERASIONAL ─────────────────────────────────── --}}
+{{-- ── 3. MODAL DETAIL OPERASIONAL & PEMBATALAN ───────────────────── --}}
 <div class="ss-modal-overlay" id="modalOperasional" role="dialog" aria-modal="true">
-    <div class="ss-modal" style="max-width:440px;">
+    <div class="ss-modal" style="max-width:460px;">
         <h2 class="ss-modal__title" id="opModalTitle">Rincian Operasional Pesanan</h2>
         
         <div id="opModalBody" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:var(--sp-4);margin:var(--sp-3) 0;">
             {{-- Dynamic via JS --}}
         </div>
 
-        <div class="ss-modal__actions">
+        <div class="ss-modal__actions" style="display:flex;justify-content:space-between;align-items:center;">
+            <div id="cancelOrderActionArea">
+                {{-- Tombol Batalkan Pesanan (jika status belum selesai atau cancelled) --}}
+            </div>
             <button type="button" class="ss-btn ss-btn--outline" id="btnCloseOpModal">Tutup</button>
         </div>
     </div>
@@ -180,17 +191,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             currentBtn.disabled = true;
 
-            fetch('/employee/orders/' + code + '/status', {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken || ''
-                },
-                body: JSON.stringify({ status: nextStatus })
-            })
-            .then(res => res.json())
-            .then(data => {
+            updateOrderStatusAjax(code, nextStatus, function (data) {
                 currentBtn.disabled = false;
 
                 // Update badge tampilan
@@ -216,23 +217,27 @@ document.addEventListener('DOMContentLoaded', function () {
                     currentBtn.remove();
                 }
 
-                showToast(`✓ Pesanan #${code} berhasil diperbarui di database: ${nextLabel}`, 'success');
-            })
-            .catch(err => {
+                showToast(`✓ Pesanan #${code} berhasil diperbarui: ${nextLabel}`, 'success');
+            }, function (errMsg) {
                 currentBtn.disabled = false;
-                alert('Gagal memperbarui status di database.');
+                alert('Gagal memperbarui status: ' + errMsg);
             });
         });
     });
 
-    // 2. Modal Detail
-    const modal     = document.getElementById('modalOperasional');
-    const closeBtn  = document.getElementById('btnCloseOpModal');
-    const modalBody = document.getElementById('opModalBody');
+    // 2. Modal Detail & Pembatalan Pesanan
+    const modal                = document.getElementById('modalOperasional');
+    const closeBtn             = document.getElementById('btnCloseOpModal');
+    const modalBody            = document.getElementById('opModalBody');
+    const cancelActionArea     = document.getElementById('cancelOrderActionArea');
+    let currentSelectedOrder   = null;
 
     document.querySelectorAll('.btn-view-detail').forEach(btn => {
         btn.addEventListener('click', function () {
             const data = JSON.parse(this.dataset.order);
+            currentSelectedOrder = data;
+
+            let statusBadge = `<span class="ss-badge ss-badge--${data.status}">${data.status}</span>`;
 
             modalBody.innerHTML = `
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
@@ -252,10 +257,46 @@ document.addEventListener('DOMContentLoaded', function () {
                     <strong style="color:var(--color-ocean-navy);">${data.quantity} ${data.unit}</strong>
                 </div>
                 <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--color-border);">
-                    <span class="ss-caption">Status</span>
-                    <span class="ss-badge ss-badge--${data.status}">${data.status}</span>
+                    <span class="ss-caption">Status Pesanan</span>
+                    ${statusBadge}
                 </div>
             `;
+
+            // Tampilkan tombol Batalkan jika status belum completed atau cancelled
+            cancelActionArea.innerHTML = '';
+            if (data.status !== 'completed' && data.status !== 'cancelled') {
+                const btnCancel = document.createElement('button');
+                btnCancel.type = 'button';
+                btnCancel.className = 'ss-btn ss-btn--danger-soft ss-btn--sm';
+                btnCancel.textContent = 'Batalkan Pesanan (Kembalikan Stok)';
+                btnCancel.addEventListener('click', function () {
+                    if (!confirm(`Konfirmasi pembatalan pesanan #${data.order_code}? Kuantitas stok produk akan otomatis dikembalikan ke katalog.`)) {
+                        return;
+                    }
+
+                    btnCancel.disabled = true;
+                    updateOrderStatusAjax(data.order_code, 'cancelled', function (resp) {
+                        modal.classList.remove('open');
+                        showToast(`✓ Pesanan #${data.order_code} berhasil dibatalkan. Kuantitas stok otomatis dikembalikan.`, 'success');
+                        
+                        // Update UI row
+                        const badgeCell = document.getElementById('badgeCell-' + data.order_code);
+                        if (badgeCell) {
+                            badgeCell.innerHTML = `<span class="ss-badge ss-badge--cancelled">Dibatalkan</span>`;
+                        }
+                        const actionContainer = document.getElementById('actionsContainer-' + data.order_code);
+                        if (actionContainer) {
+                            const stepBtn = actionContainer.querySelector('.btn-action-step');
+                            if (stepBtn) stepBtn.remove();
+                        }
+                        setTimeout(() => window.location.reload(), 1200);
+                    }, function (errMsg) {
+                        btnCancel.disabled = false;
+                        alert('Gagal membatalkan pesanan: ' + errMsg);
+                    });
+                });
+                cancelActionArea.appendChild(btnCancel);
+            }
 
             modal.classList.add('open');
         });
@@ -264,6 +305,27 @@ document.addEventListener('DOMContentLoaded', function () {
     closeBtn.addEventListener('click', () => modal.classList.remove('open'));
     if (modal) {
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+    }
+
+    function updateOrderStatusAjax(orderCode, status, onSuccess, onError) {
+        fetch('/employee/orders/' + orderCode + '/status', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken || ''
+            },
+            body: JSON.stringify({ status: status })
+        })
+        .then(res => {
+            if (!res.ok) return res.json().then(err => { throw err; });
+            return res.json();
+        })
+        .then(data => onSuccess(data))
+        .catch(err => {
+            const msg = err.error?.message || err.message || 'Terjadi kesalahan sistem.';
+            if (onError) onError(msg);
+        });
     }
 
     function showToast(message, type) {
