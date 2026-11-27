@@ -159,6 +159,7 @@ class EmployeeController extends Controller
                 'recipient_phone'  => $buyerPhone,
                 'delivery_address' => 'Penjualan Langsung di Toko (Offline)',
                 'buyer_note'       => "Kasir Cepat ({$method}) oleh {$user?->name}",
+                'transaction_type' => 'offline_cash',
             ]);
 
             OrderItem::create([
