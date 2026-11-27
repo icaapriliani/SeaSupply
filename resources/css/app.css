@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -9,9 +10,6 @@
    SEASUPPLY — DESIGN SYSTEM
    Marketplace UMKM Olahan Laut
    ============================================================ */
-
-/* Import Font Inter */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 /* ── 1. CSS Custom Properties (Design Tokens) ───────────────── */
 :root {
@@ -904,6 +902,74 @@ a  { text-decoration: none; color: inherit; }
     border-radius: var(--radius-xs);
 }
 
+/* ── MICRO-INTERACTIONS & ANIMATIONS ────────────────────────── */
+@keyframes ssFadeSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ss-card--animated {
+    animation: ssFadeSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Product Detail Grid Layout */
+.ss-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    min-height: 420px;
+}
+
+/* Mobile Bottom Navigation Bar */
+.ss-mobile-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-top: 1px solid var(--color-border);
+    box-shadow: 0 -2px 12px rgba(18, 59, 74, 0.08);
+    z-index: 990;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 var(--sp-2);
+}
+
+.ss-mobile-nav__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: var(--fw-medium);
+    padding: 6px 12px;
+    border-radius: var(--radius-xs);
+    text-decoration: none;
+    transition: color 0.15s, transform 0.15s;
+    user-select: none;
+}
+
+.ss-mobile-nav__item:active {
+    transform: scale(0.92);
+}
+
+.ss-mobile-nav__item.active {
+    color: var(--color-sea-teal);
+    font-weight: var(--fw-semibold);
+}
+
 /* ── 21. ALERT / NOTIFICATION BAR ───────────────────────────── */
 .ss-alert {
     display: flex;
@@ -1010,19 +1076,60 @@ a  { text-decoration: none; color: inherit; }
 
 /* ── 25. RESPONSIVE ─────────────────────────────────────────── */
 @media (max-width: 768px) {
-    .ss-nav__inner   { padding: 0 var(--sp-3); gap: var(--sp-2); }
-    .ss-nav__search  { max-width: none; }
-    .ss-nav__links .ss-nav__link span { display: none; }
-    .ss-nav__links .ss-nav__link { padding: var(--sp-1) var(--sp-2); }
-    .ss-nav__link-icon { font-size: 20px; }
+    body { padding-bottom: 68px; }
+
+    .ss-nav__inner   { padding: 0 var(--sp-3); gap: var(--sp-2); height: 56px; }
+    .ss-nav__search  { max-width: none; flex: 1; }
+    .ss-nav__links   { display: none; } /* Digantikan oleh mobile bottom navigation yang ramah jari */
+    .ss-nav__profile-btn { display: none; }
+
+    .ss-mobile-nav   { display: flex; }
 
     .ss-page { padding: var(--sp-3); }
-    .ss-hero { padding: var(--sp-5); }
+    .ss-hero { padding: var(--sp-5); border-radius: var(--radius-sm); }
     .ss-hero__title { font-size: 22px; }
     .ss-hero__visual { display: none; }
     .ss-product-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--sp-3); }
+
+    /* Product Detail Responsif */
+    .ss-detail-grid { grid-template-columns: 1fr; min-height: auto; }
+
+    /* Modal Responsif di Smartphone */
+    .ss-modal {
+        max-width: calc(100vw - 28px);
+        width: 100%;
+        padding: var(--sp-4);
+        max-height: 88vh;
+        overflow-y: auto;
+    }
 }
 
 @media (max-width: 480px) {
-    .ss-product-grid { grid-template-columns: 1fr 1fr; }
+    .ss-nav__inner { padding: 0 10px; gap: 8px; }
+    .ss-nav__brand { font-size: 17px; }
+    .ss-nav__brand-icon { width: 28px; height: 28px; font-size: 14px; }
+    .ss-nav__search input { height: 36px; font-size: 12px; padding: 0 10px 0 32px; }
+    .ss-nav__search-icon { left: 10px; font-size: 13px; }
+
+    .ss-hero { padding: var(--sp-4); margin-bottom: var(--sp-4); }
+    .ss-hero__eyebrow { font-size: 10px; }
+    .ss-hero__title { font-size: 19px; }
+    .ss-hero__subtitle { font-size: 12px; margin-bottom: var(--sp-3); }
+    .ss-hero__cta { padding: 8px 14px; font-size: 12px; }
+
+    .ss-chip { padding: 5px 12px; font-size: 11px; }
+
+    .ss-product-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ss-card__body { padding: 10px 8px; gap: 4px; }
+    .ss-card__category { font-size: 10px; }
+    .ss-card__name { font-size: 13px; min-height: 34px; }
+    .ss-card__store { font-size: 10px; }
+    .ss-card__price { font-size: 13px; font-weight: var(--fw-bold); }
+    .ss-card__price-unit { font-size: 10px; }
+    .ss-card__stock { font-size: 10px; }
+    .ss-card__footer { padding: 0 8px 10px; }
+    .ss-card__footer .ss-btn { padding: 7px 8px; font-size: 12px; }
+
+    .ss-modal__actions { flex-direction: column-reverse; gap: 8px; }
+    .ss-modal__actions .ss-btn { width: 100%; }
 }

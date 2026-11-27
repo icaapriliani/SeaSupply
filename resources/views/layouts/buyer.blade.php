@@ -81,6 +81,20 @@
                     <span>Pesanan</span>
                 </a>
             </li>
+            @auth
+            <li>
+                <a href="{{ route('profile.edit') }}" 
+                   class="ss-nav__link {{ request()->routeIs('profile.*') ? 'active' : '' }}" 
+                   aria-label="Profil saya">
+                    <span class="ss-nav__link-icon" aria-hidden="true">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </span>
+                    <span>Profil</span>
+                </a>
+            </li>
+            @endauth
             <li>
                 <a href="#" class="ss-nav__link" aria-label="Favorit">
                     <span class="ss-nav__link-icon" aria-hidden="true">
@@ -94,10 +108,10 @@
         </ul>
 
         {{-- User Auth / Login Section --}}
-        <div style="display:flex;align-items:center;gap:8px;border-left:1px solid var(--color-border);padding-left:12px;">
+        <div class="ss-nav__auth" style="display:flex;align-items:center;gap:8px;border-left:1px solid var(--color-border);padding-left:12px;">
             @auth
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <div style="text-align:right;">
+                    <a href="{{ route('profile.edit') }}" style="text-align:right;text-decoration:none;" title="Buka profil akun">
                         <div style="font-size:12px;font-weight:600;color:var(--color-ink);line-height:1.2;">{{ Auth::user()->name }}</div>
                         <div style="font-size:10px;color:var(--color-sea-teal);font-weight:500;">
                             @php
@@ -105,7 +119,10 @@
                             @endphp
                             {{ $role === 'owner' ? '👑 Owner' : ($role === 'employee' ? '💼 Pegawai' : '🛒 Pembeli') }}
                         </div>
-                    </div>
+                    </a>
+                    <a href="{{ route('profile.edit') }}" class="ss-btn ss-btn--outline ss-btn--sm ss-nav__profile-btn" style="font-size:11px;padding:4px 8px;" title="Profil Saya">
+                        Profil
+                    </a>
                     <form action="{{ route('logout') }}" method="POST" style="margin:0;">
                         @csrf
                         <button type="submit" class="ss-btn ss-btn--outline ss-btn--sm" style="font-size:11px;padding:4px 8px;" title="Keluar">
@@ -121,6 +138,37 @@
         </div>
 
     </div>
+</nav>
+
+{{-- ── MOBILE BOTTOM NAVIGATION (Khusus Layar Smartphone Android/iOS) ── --}}
+<nav class="ss-mobile-nav" aria-label="Navigasi bawah mobile">
+    <a href="{{ route('catalog.index') }}" class="ss-mobile-nav__item {{ request()->routeIs('catalog.index') && !request()->routeIs('catalog.orders*') ? 'active' : '' }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        <span>Beranda</span>
+    </a>
+    <a href="{{ route('catalog.orders') }}" class="ss-mobile-nav__item {{ request()->routeIs('catalog.orders*') ? 'active' : '' }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        <span>Pesanan</span>
+    </a>
+    @auth
+    <a href="{{ route('profile.edit') }}" class="ss-mobile-nav__item {{ request()->routeIs('profile.*') ? 'active' : '' }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span>Profil</span>
+    </a>
+    @else
+    <a href="{{ route('login') }}" class="ss-mobile-nav__item {{ request()->routeIs('login*') ? 'active' : '' }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        <span>Masuk</span>
+    </a>
+    @endauth
 </nav>
 
 {{-- ── MAIN CONTENT ─────────────────────────────────────────── --}}

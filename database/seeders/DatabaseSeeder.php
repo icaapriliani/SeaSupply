@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'hasan@seasupply.local'],
             [
                 'name'     => 'Pak Hasan',
+                'phone'    => '0813-9876-5432',
                 'password' => Hash::make('password123'),
             ]
         );
@@ -29,6 +30,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'rian@seasupply.local'],
             [
                 'name'     => 'Rian Hidayat',
+                'phone'    => '0815-1234-5678',
                 'password' => Hash::make('password123'),
             ]
         );
@@ -37,6 +39,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'budi@seasupply.local'],
             [
                 'name'     => 'Budi Santoso',
+                'phone'    => '0812-3456-7890',
                 'password' => Hash::make('password123'),
             ]
         );

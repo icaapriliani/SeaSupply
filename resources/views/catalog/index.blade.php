@@ -65,7 +65,7 @@
     {{-- ── PRODUCT SECTION ──────────────────────────────── --}}
     <section class="ss-products" id="produk-pilihan" aria-label="Daftar produk">
         <div class="ss-section-header">
-            <h2 class="ss-section-title">
+            <h2 class="ss-section-title" id="sectionProductTitle">
                 @if($search)
                     Hasil Pencarian
                 @elseif($activeCategory !== 'all')
@@ -75,19 +75,38 @@
                     Produk pilihan
                 @endif
             </h2>
-            @if($activeCategory !== 'all' || $search)
-            <a href="{{ route('catalog.index') }}" class="ss-section-link">
+            <a href="{{ route('catalog.index') }}" class="ss-section-link" id="linkLihatSemua" style="{{ $activeCategory !== 'all' || $search ? '' : 'display:none;' }}">
                 Lihat semua
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="m9 18 6-6-6-6"/>
                 </svg>
             </a>
-            @endif
+        </div>
+
+        {{-- SKELETON LOADER GRID (MICRO-INTERACTION SAAT MEMUAT / FILTER) --}}
+        <div class="ss-product-grid" id="skeletonGrid" style="display:none;" aria-hidden="true">
+            @for($i = 0; $i < 4; $i++)
+            <div class="ss-card ss-card--skeleton" style="pointer-events:none;">
+                <div class="ss-card__image ss-skeleton" style="aspect-ratio:4/3;background-size:600px 100%;"></div>
+                <div class="ss-card__body">
+                    <div class="ss-skeleton" style="height:12px;width:60px;margin-bottom:6px;"></div>
+                    <div class="ss-skeleton" style="height:18px;width:85%;margin-bottom:8px;"></div>
+                    <div class="ss-skeleton" style="height:12px;width:70%;margin-bottom:12px;"></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:8px;">
+                        <div class="ss-skeleton" style="height:20px;width:80px;"></div>
+                        <div class="ss-skeleton" style="height:14px;width:50px;"></div>
+                    </div>
+                </div>
+                <div class="ss-card__footer">
+                    <div class="ss-skeleton" style="height:36px;width:100%;border-radius:var(--radius-sm);"></div>
+                </div>
+            </div>
+            @endfor
         </div>
 
         @if(count($products) === 0)
         {{-- EMPTY STATE --}}
-        <div class="ss-empty" role="status">
+        <div class="ss-empty" id="staticEmptyState" role="status">
             <div class="ss-empty__icon">🌊</div>
             <div class="ss-empty__title">Produk tidak ditemukan</div>
             <p class="ss-empty__text">
@@ -103,10 +122,22 @@
         </div>
 
         @else
+        {{-- DYNAMIC EMPTY STATE (UNTUK FILTER JS) --}}
+        <div class="ss-empty" id="dynamicEmptyState" style="display:none;" role="status">
+            <div class="ss-empty__icon">🌊</div>
+            <div class="ss-empty__title">Produk tidak ditemukan</div>
+            <p class="ss-empty__text">
+                Belum ada produk pada kategori ini.
+            </p>
+            <a href="{{ route('catalog.index') }}" class="ss-btn ss-btn--outline btn-reset-category" style="margin-top:8px;">
+                Lihat semua produk
+            </a>
+        </div>
+
         {{-- PRODUCT GRID --}}
-        <div class="ss-product-grid" role="list">
+        <div class="ss-product-grid" id="productGrid" role="list">
             @foreach($products as $product)
-            <article class="ss-card" role="listitem">
+            <article class="ss-card ss-card--animated" data-category="{{ $product['category_id'] }}" role="listitem">
 
                 {{-- Image / Emoji Placeholder --}}
                 <div class="ss-card__image" style="position:relative;">
@@ -217,6 +248,89 @@ document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.ss-card__name').forEach(el => {
             el.innerHTML = el.innerHTML.replace(re,
                 '<mark style="background:rgba(22,140,131,.18);border-radius:2px;padding:0 2px;">$1</mark>');
+        });
+    }
+
+    // ── INTERAKTIVITAS: ANIMASI TRANSISI & SKELETON LOADER SAAT FILTER KATEGORI ──
+    const chips            = document.querySelectorAll('.ss-category-chips .ss-chip');
+    const productGrid      = document.getElementById('productGrid');
+    const skeletonGrid     = document.getElementById('skeletonGrid');
+    const dynamicEmpty     = document.getElementById('dynamicEmptyState');
+    const sectionTitle     = document.getElementById('sectionProductTitle');
+    const linkLihatSemua   = document.getElementById('linkLihatSemua');
+    const cards            = document.querySelectorAll('#productGrid .ss-card');
+
+    if (chips.length > 0 && productGrid && skeletonGrid) {
+        chips.forEach(chip => {
+            chip.addEventListener('click', function (e) {
+                // Jangan cegah default jika sedang dalam mode search backend
+                if (q) return;
+
+                e.preventDefault();
+                const targetUrl = new URL(this.href, window.location.origin);
+                const categorySlug = targetUrl.searchParams.get('category_id') || 'all';
+                const catName = this.textContent.trim();
+
+                // 1. Update status active pada chips
+                chips.forEach(c => {
+                    c.classList.remove('active');
+                    c.setAttribute('aria-pressed', 'false');
+                });
+                this.classList.add('active');
+                this.setAttribute('aria-pressed', 'true');
+
+                // 2. Micro-interaction: Tampilkan skeleton loader & sembunyikan grid sementara
+                productGrid.style.display = 'none';
+                if (dynamicEmpty) dynamicEmpty.style.display = 'none';
+                skeletonGrid.style.display = 'grid';
+
+                // 3. Update judul section & tombol lihat semua
+                if (sectionTitle) {
+                    sectionTitle.textContent = categorySlug === 'all' ? 'Produk pilihan' : catName;
+                }
+                if (linkLihatSemua) {
+                    linkLihatSemua.style.display = categorySlug === 'all' ? 'none' : 'inline-flex';
+                }
+
+                // 4. Simulasi transisi pemuatan data yang halus (~260ms)
+                setTimeout(() => {
+                    skeletonGrid.style.display = 'none';
+
+                    let visibleCount = 0;
+                    cards.forEach(card => {
+                        const cardCat = card.getAttribute('data-category');
+                        if (categorySlug === 'all' || cardCat === categorySlug) {
+                            card.style.display = '';
+                            card.classList.remove('ss-card--animated');
+                            void card.offsetWidth; // Force reflow for restart animation
+                            card.classList.add('ss-card--animated');
+                            visibleCount++;
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+
+                    if (visibleCount === 0) {
+                        if (dynamicEmpty) dynamicEmpty.style.display = 'flex';
+                    } else {
+                        productGrid.style.display = 'grid';
+                    }
+
+                    // 5. Update browser URL history tanpa reload
+                    history.pushState({ category: categorySlug }, '', targetUrl.pathname + targetUrl.search);
+                }, 260);
+            });
+        });
+
+        // Tangani reset filter pada empty state
+        document.querySelectorAll('.btn-reset-category').forEach(btn => {
+            btn.addEventListener('click', function (e) {
+                const allChip = document.querySelector('.ss-category-chips .ss-chip');
+                if (allChip) {
+                    allChip.click();
+                    e.preventDefault();
+                }
+            });
         });
     }
 });

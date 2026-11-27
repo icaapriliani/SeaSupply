@@ -116,10 +116,16 @@ class CatalogController extends Controller
     public function storeOrder(Request $request)
     {
         $validated = $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity'   => 'required|integer|min:1',
-            'recipient_name'  => 'nullable|string|max:100',
-            'recipient_phone' => 'nullable|string|max:30',
+            'product_id'       => 'required|exists:products,id',
+            'quantity'         => 'required|integer|min:1',
+            'recipient_name'   => 'required|string|max:100',
+            'recipient_phone'  => 'required|string|max:30',
+            'delivery_address' => 'required|string|max:500',
+            'buyer_note'       => 'nullable|string|max:500',
+        ], [
+            'recipient_name.required'   => 'Nama penerima pesanan wajib diisi.',
+            'recipient_phone.required'  => 'Nomor telepon / WhatsApp penerima wajib diisi.',
+            'delivery_address.required' => 'Alamat pengiriman lengkap wajib diisi.',
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
@@ -159,20 +165,20 @@ class CatalogController extends Controller
             // Generate kode pesanan unik
             $orderCode = 'SS-' . str_pad((string) (Order::max('id') + 1), 3, '0', STR_PAD_LEFT);
 
-            // Cari atau buat default buyer
-            $buyer = User::first();
+            // Cari atau buat default buyer (utamakan yang sedang login)
+            $buyer = Auth::user() ?? User::first();
 
             // Simpan pesanan
             $order = Order::create([
                 'order_code'      => $orderCode,
                 'store_id'        => $product->store_id,
-                'buyer_user_id'   => $buyer?->id,
+                'buyer_user_id'   => Auth::id() ?? $buyer?->id,
                 'status'          => 'pending',
                 'subtotal'        => $subtotal,
-                'recipient_name'  => $validated['recipient_name'] ?? ($buyer?->name ?? 'Pembeli'),
-                'recipient_phone' => $validated['recipient_phone'] ?? '0812-3456-7890',
-                'delivery_address'=> 'Alamat pembeli',
-                'buyer_note'      => 'Pesanan via katalog online SeaSupply',
+                'recipient_name'  => $validated['recipient_name'],
+                'recipient_phone' => $validated['recipient_phone'],
+                'delivery_address'=> $validated['delivery_address'],
+                'buyer_note'      => $validated['buyer_note'] ?? 'Pesanan via katalog online SeaSupply',
             ]);
 
             // Simpan snapshot item pesanan
@@ -227,6 +233,8 @@ class CatalogController extends Controller
                 'status'         => $o->status,
                 'recipient_name' => $o->recipient_name,
                 'recipient_phone'=> $o->recipient_phone,
+                'delivery_address' => $o->delivery_address,
+                'buyer_note'       => $o->buyer_note,
                 'date'           => $o->created_at->format('d M Y, H:i'),
             ];
         });

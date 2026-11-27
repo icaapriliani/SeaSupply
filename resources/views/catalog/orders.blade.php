@@ -211,6 +211,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div style="font-weight:600;margin-bottom:4px;">${data.item_name}</div>
                     <div class="ss-caption">${data.quantity} ${data.unit} &times; Rp ${parseInt(data.unit_price).toLocaleString('id-ID')}</div>
                 </div>
+                ${data.recipient_name || data.delivery_address ? `
+                <div style="margin:10px 0;padding:10px;background:white;border-radius:var(--radius-xs);border:1px solid var(--color-border);font-size:12px;">
+                    <div style="font-weight:600;color:var(--color-ocean-navy);margin-bottom:4px;">📍 Alamat & Penerima</div>
+                    <div><strong>${data.recipient_name || '-'}</strong> (${data.recipient_phone || '-'})</div>
+                    <div style="color:var(--color-muted);margin-top:2px;">${data.delivery_address || 'Alamat tidak dicantumkan'}</div>
+                    ${data.buyer_note ? `<div style="margin-top:6px;padding-top:4px;border-top:1px dashed var(--color-border);color:var(--color-sea-teal);"><strong>Catatan:</strong> ${data.buyer_note}</div>` : ''}
+                </div>
+                ` : ''}
                 <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--color-border);">
                     <span style="font-weight:700;">Subtotal Akhir</span>
                     <strong style="color:var(--color-ocean-navy);font-size:16px;">Rp ${parseInt(data.subtotal).toLocaleString('id-ID')}</strong>
