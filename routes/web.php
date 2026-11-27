@@ -19,6 +19,8 @@ Route::post('/register',         [AuthController::class, 'register'])->name('reg
 Route::post('/logout',           [AuthController::class, 'logout'])->name('logout');
 
 // ── Buyer Routes (Wireframe A & B) ─────────────────────────────
+Route::get('/cart', [CatalogController::class, 'cart'])->name('cart.index');
+
 Route::prefix('catalog')->name('catalog.')->group(function () {
     Route::get('/',             [CatalogController::class, 'index'])->name('index');
     Route::get('/product/{id}', [CatalogController::class, 'show'])->name('show');
@@ -53,6 +55,7 @@ Route::prefix('owner')->name('owner.')->middleware(['auth', 'store.role:owner'])
 // ── Employee Routes (Wireframe D — Terproteksi Khusus Role Pegawai) ─
 Route::prefix('employee')->name('employee.')->middleware(['auth', 'store.role:employee'])->group(function () {
     Route::get('/orders',                     [EmployeeController::class, 'orders'])->name('orders');
+    Route::post('/orders/quick-sale',         [EmployeeController::class, 'storeQuickSale'])->name('orders.quick_sale');
     Route::patch('/orders/{orderCode}/status', [EmployeeController::class, 'updateOrderStatus'])->name('orders.update_status');
     Route::get('/summary',                    [EmployeeController::class, 'summary'])->name('summary');
     Route::get('/products',                   [EmployeeController::class, 'products'])->name('products');

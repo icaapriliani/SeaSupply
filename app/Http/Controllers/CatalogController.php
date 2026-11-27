@@ -111,6 +111,33 @@ class CatalogController extends Controller
     }
 
     /**
+     * GET /cart (Halaman Keranjang Belanja Pembeli)
+     */
+    public function cart()
+    {
+        $productsMap = Product::with(['store', 'category'])
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('id')
+            ->map(function ($p) {
+                return [
+                    'id'             => $p->id,
+                    'name'           => $p->name,
+                    'category'       => $p->category?->name ?? 'Olahan Laut',
+                    'store_name'     => $p->store?->name ?? 'Usaha Pak Hasan',
+                    'store_location' => $p->store?->location_label ?? 'Cirebon, Jawa Barat',
+                    'price'          => $p->price,
+                    'unit'           => $p->unit,
+                    'stock'          => $p->stock_quantity,
+                    'emoji'          => $p->emoji ?? '🐟',
+                    'gradient'       => $p->gradient ?? 'linear-gradient(135deg,#D4E8F0,#A8D1E0)',
+                ];
+            });
+
+        return view('catalog.cart', compact('productsMap'));
+    }
+
+    /**
      * POST /catalog/order (Pembuatan Pesanan Transaksional dengan Row Locking)
      */
     public function storeOrder(Request $request)

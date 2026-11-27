@@ -33,7 +33,7 @@
             </a>
             <a href="{{ route('catalog.orders', ['status' => 'pending']) }}" 
                class="ss-chip {{ request('status') === 'pending' ? 'active' : '' }}" style="padding:5px 14px;">
-                Menunggu
+                Menunggu Pembayaran
             </a>
             <a href="{{ route('catalog.orders', ['status' => 'processing']) }}" 
                class="ss-chip {{ request('status') === 'processing' ? 'active' : '' }}" style="padding:5px 14px;">
@@ -94,9 +94,9 @@
                 </div>
 
                 {{-- Status Badge --}}
-                <div>
+                <div id="orderStatusWrap-{{ $order['order_code'] }}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                     @if($order['status'] === 'pending')
-                        <span class="ss-badge ss-badge--pending">Menunggu</span>
+                        <span class="ss-badge ss-badge--pending">Menunggu Pembayaran</span>
                     @elseif($order['status'] === 'processing')
                         <span class="ss-badge ss-badge--processing">Diproses</span>
                     @elseif($order['status'] === 'shipped')
@@ -135,9 +135,9 @@
 
             {{-- Footer Kartu: Bantuan & Detail --}}
             <div style="display:flex;justify-content:space-between;align-items:center;padding-top:var(--sp-3);border-top:1px dashed var(--color-border);flex-wrap:wrap;gap:var(--sp-2);">
-                <span class="ss-caption" style="color:var(--color-muted);">
+                <span class="ss-caption" id="orderHint-{{ $order['order_code'] }}" style="color:var(--color-muted);">
                     @if($order['status'] === 'pending')
-                        ⏳ Pesanan Anda sedang menunggu verifikasi oleh toko.
+                        ⏳ Segera lakukan transfer dan unggah bukti pembayaran Anda.
                     @elseif($order['status'] === 'processing')
                         📦 Toko sedang menyiapkan dan mengemas produk olahan laut Anda.
                     @elseif($order['status'] === 'shipped')
@@ -147,10 +147,20 @@
                     @endif
                 </span>
 
-                <button class="ss-btn ss-btn--outline ss-btn--sm btn-show-order-detail" 
-                        data-order="{{ json_encode($order) }}">
-                    Rincian Pesanan
-                </button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    @if($order['status'] === 'pending')
+                    <button type="button"
+                            class="ss-btn ss-btn--primary ss-btn--sm btn-upload-proof"
+                            id="btnProof-{{ $order['order_code'] }}"
+                            data-order="{{ json_encode($order) }}">
+                        📤 Upload Bukti Transfer
+                    </button>
+                    @endif
+                    <button class="ss-btn ss-btn--outline ss-btn--sm btn-show-order-detail" 
+                            data-order="{{ json_encode($order) }}">
+                        Rincian Pesanan
+                    </button>
+                </div>
             </div>
 
         </article>
@@ -177,11 +187,94 @@
     </div>
 </div>
 
+{{-- ── MODAL UPLOAD BUKTI TRANSFER PEMBAYARAN ──────────── --}}
+<div class="ss-modal-overlay" id="modalUploadProof" role="dialog" aria-modal="true" aria-labelledby="uploadProofTitle">
+    <div class="ss-modal" style="max-width:480px;max-height:92vh;overflow-y:auto;">
+        <h2 class="ss-modal__title" id="uploadProofTitle">📤 Upload Bukti Transfer</h2>
+        <p class="ss-caption" style="margin-bottom:var(--sp-3);">
+            Unggah foto/screenshot struk transfer pembayaran untuk pesanan <strong id="proofOrderCodeLabel">#SS-000</strong>.
+        </p>
+
+        {{-- Info Rekening & Nominal --}}
+        <div style="background:var(--color-seafoam-bg);border:1px solid var(--color-seafoam);border-radius:var(--radius-sm);padding:var(--sp-3);margin-bottom:var(--sp-4);font-size:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="color:var(--color-muted);">Total Tagihan</span>
+                <strong id="proofTotalAmount" style="font-size:16px;color:var(--color-ocean-navy);">Rp 0</strong>
+            </div>
+            <div style="padding-top:6px;border-top:1px dashed rgba(18,59,74,0.2);color:var(--color-ocean-navy);line-height:1.5;">
+                <div><strong>BCA:</strong> 139-489-2011 (a.n Usaha Pak Hasan)</div>
+                <div><strong>BRI:</strong> 0021-01-045892-50-3 (a.n Usaha Pak Hasan)</div>
+            </div>
+        </div>
+
+        <form id="formUploadProof" style="display:flex;flex-direction:column;gap:var(--sp-3);">
+            <input type="hidden" id="proofOrderCodeInput">
+
+            <div class="ss-two-col-grid">
+                <div class="ss-input-group">
+                    <label class="ss-label" for="proofBankOrigin">Bank / E-Wallet Pengirim *</label>
+                    <select id="proofBankOrigin" class="ss-select" required>
+                        <option value="BCA">Transfer Bank BCA</option>
+                        <option value="BRI">Transfer Bank BRI</option>
+                        <option value="Mandiri">Transfer Bank Mandiri</option>
+                        <option value="BNI">Transfer Bank BNI</option>
+                        <option value="QRIS / E-Wallet">QRIS / GoPay / DANA / OVO</option>
+                    </select>
+                </div>
+                <div class="ss-input-group">
+                    <label class="ss-label" for="proofSenderName">Nama Pengirim *</label>
+                    <input type="text" id="proofSenderName" class="ss-input" value="{{ Auth::user()?->name ?? '' }}" placeholder="a.n pemilik rekening" required>
+                </div>
+            </div>
+
+            <div class="ss-input-group">
+                <label class="ss-label" for="proofImageInput">Foto Bukti Transfer (JPG / PNG / WEBP, Maks 2MB) *</label>
+                <label class="ss-upload-dropzone" for="proofImageInput" id="proofDropzoneLabel">
+                    <div style="font-size:26px;margin-bottom:4px;">📷</div>
+                    <div style="font-size:13px;font-weight:600;color:var(--color-ocean-navy);">Pilih atau ketuk untuk unggah foto struk</div>
+                    <div class="ss-caption">Pastikan nominal dan tanggal transfer terlihat jelas</div>
+                </label>
+                <input type="file" id="proofImageInput" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none;">
+
+                <div id="proofPreviewWrap" style="display:none;margin-top:8px;position:relative;width:fit-content;">
+                    <img id="proofPreviewImg" src="" alt="Pratinjau bukti transfer" style="max-width:100%;max-height:200px;border-radius:var(--radius-sm);border:1.5px solid var(--color-sea-teal);object-fit:contain;">
+                    <button type="button" id="btnRemoveProofImg" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;border:none;background:var(--color-danger);color:#fff;cursor:pointer;font-weight:700;" title="Ganti foto">&times;</button>
+                </div>
+            </div>
+
+            <div class="ss-input-group">
+                <label class="ss-label" for="proofNote">Catatan Tambahan (Opsional)</label>
+                <input type="text" id="proofNote" class="ss-input" placeholder="Contoh: Transfer via m-BCA jam 14:15">
+            </div>
+
+            <div class="ss-modal__actions" style="margin-top:var(--sp-3);">
+                <button type="button" class="ss-btn ss-btn--outline" id="btnCloseUploadProof">Batal</button>
+                <button type="submit" class="ss-btn ss-btn--primary" id="btnSubmitUploadProof">Kirim Bukti Transfer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- ── MODAL LIHAT BUKTI TRANSFER ───────────────────────── --}}
+<div class="ss-modal-overlay" id="modalViewProof" role="dialog" aria-modal="true">
+    <div class="ss-modal" style="max-width:440px;max-height:90vh;overflow-y:auto;">
+        <h2 class="ss-modal__title" id="viewProofTitle">Bukti Transfer Terkirim</h2>
+        <div id="viewProofMeta" class="ss-caption" style="margin-bottom:var(--sp-3);line-height:1.5;"></div>
+        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:8px;text-align:center;margin-bottom:var(--sp-4);">
+            <img id="viewProofImg" src="" alt="Bukti transfer" style="max-width:100%;max-height:280px;margin:0 auto;border-radius:var(--radius-xs);">
+        </div>
+        <div class="ss-modal__actions">
+            <button type="button" class="ss-btn ss-btn--primary ss-btn--full" id="btnCloseViewProof">Tutup</button>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const PROOF_STORAGE_KEY = 'seasupply_payment_proofs_v1';
     const modal     = document.getElementById('modalBuyerOrder');
     const closeBtn  = document.getElementById('btnCloseBuyerModal');
     const modalBody = document.getElementById('buyerModalContent');
@@ -205,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
                     <span class="ss-caption">Status Saat Ini</span>
-                    <span class="ss-badge ss-badge--${data.status}">${data.status}</span>
+                    <span class="ss-badge ss-badge--${data.status}">${data.status === 'pending' ? 'Menunggu Pembayaran' : data.status}</span>
                 </div>
                 <div style="margin:10px 0;padding:10px;background:white;border-radius:var(--radius-xs);border:1px solid var(--color-border);">
                     <div style="font-weight:600;margin-bottom:4px;">${data.item_name}</div>
@@ -233,6 +326,154 @@ document.addEventListener('DOMContentLoaded', function () {
     if (modal) {
         modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
     }
+
+    // ── LOGIKA UPLOAD BUKTI TRANSFER ──────────────────────────────────────
+    const modalProof = document.getElementById('modalUploadProof');
+    const btnCloseProof = document.getElementById('btnCloseUploadProof');
+    const formProof = document.getElementById('formUploadProof');
+    const inputProofImg = document.getElementById('proofImageInput');
+    const previewWrap = document.getElementById('proofPreviewWrap');
+    const previewImg = document.getElementById('proofPreviewImg');
+    const dropzoneLabel = document.getElementById('proofDropzoneLabel');
+    const btnRemoveImg = document.getElementById('btnRemoveProofImg');
+
+    const modalViewProof = document.getElementById('modalViewProof');
+    const btnCloseViewProof = document.getElementById('btnCloseViewProof');
+
+    let selectedProofDataUrl = '';
+
+    function readProofs() {
+        try {
+            return JSON.parse(localStorage.getItem(PROOF_STORAGE_KEY) || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function saveProof(code, payload) {
+        const all = readProofs();
+        all[code] = payload;
+        localStorage.setItem(PROOF_STORAGE_KEY, JSON.stringify(all));
+    }
+
+    function applyProofStates() {
+        const proofs = readProofs();
+        Object.keys(proofs).forEach(code => {
+            const p = proofs[code];
+            const btn = document.getElementById('btnProof-' + code);
+            const statusWrap = document.getElementById('orderStatusWrap-' + code);
+            const hint = document.getElementById('orderHint-' + code);
+
+            if (statusWrap && !statusWrap.querySelector('.ss-proof-sent-badge')) {
+                const badge = document.createElement('span');
+                badge.className = 'ss-badge ss-badge--processing ss-proof-sent-badge';
+                badge.textContent = 'Bukti Terkirim';
+                statusWrap.appendChild(badge);
+            }
+
+            if (hint) {
+                hint.innerHTML = `✓ Bukti transfer (${p.bank}) dikirim pada ${p.uploadedAt}. Menunggu verifikasi toko.`;
+                hint.style.color = 'var(--color-sea-teal)';
+            }
+
+            if (btn) {
+                btn.classList.remove('ss-btn--primary');
+                btn.classList.add('ss-btn--outline');
+                btn.textContent = '🖼️ Lihat Bukti';
+                btn.dataset.proofMode = 'view';
+            }
+        });
+    }
+
+    document.querySelectorAll('.btn-upload-proof').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const order = JSON.parse(this.dataset.order);
+            const proofs = readProofs();
+
+            if (this.dataset.proofMode === 'view' && proofs[order.order_code]) {
+                const p = proofs[order.order_code];
+                document.getElementById('viewProofTitle').textContent = 'Bukti Transfer #' + order.order_code;
+                document.getElementById('viewProofMeta').innerHTML =
+                    `<strong>Pengirim:</strong> ${p.senderName} (${p.bank})<br><strong>Waktu Unggah:</strong> ${p.uploadedAt}` +
+                    (p.note ? `<br><strong>Catatan:</strong> ${p.note}` : '');
+                document.getElementById('viewProofImg').src = p.imageDataUrl;
+                modalViewProof.classList.add('open');
+                return;
+            }
+
+            document.getElementById('proofOrderCodeInput').value = order.order_code;
+            document.getElementById('proofOrderCodeLabel').textContent = '#' + order.order_code;
+            document.getElementById('proofTotalAmount').textContent = 'Rp ' + parseInt(order.subtotal, 10).toLocaleString('id-ID');
+            resetProofPreview();
+            modalProof.classList.add('open');
+        });
+    });
+
+    inputProofImg.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Ukuran foto maksimal 2MB.');
+            resetProofPreview();
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function (ev) {
+            selectedProofDataUrl = ev.target.result;
+            previewImg.src = selectedProofDataUrl;
+            previewWrap.style.display = 'block';
+            dropzoneLabel.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function resetProofPreview() {
+        inputProofImg.value = '';
+        selectedProofDataUrl = '';
+        previewImg.src = '';
+        previewWrap.style.display = 'none';
+        dropzoneLabel.style.display = 'block';
+    }
+
+    btnRemoveImg.addEventListener('click', resetProofPreview);
+    btnCloseProof.addEventListener('click', () => modalProof.classList.remove('open'));
+    modalProof.addEventListener('click', (e) => { if (e.target === modalProof) modalProof.classList.remove('open'); });
+    btnCloseViewProof.addEventListener('click', () => modalViewProof.classList.remove('open'));
+    modalViewProof.addEventListener('click', (e) => { if (e.target === modalViewProof) modalViewProof.classList.remove('open'); });
+
+    formProof.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!selectedProofDataUrl) {
+            alert('Silakan pilih foto bukti transfer terlebih dahulu.');
+            return;
+        }
+
+        const code = document.getElementById('proofOrderCodeInput').value;
+        const bank = document.getElementById('proofBankOrigin').value;
+        const senderName = document.getElementById('proofSenderName').value.trim();
+        const note = document.getElementById('proofNote').value.trim();
+
+        saveProof(code, {
+            bank: bank,
+            senderName: senderName,
+            note: note,
+            imageDataUrl: selectedProofDataUrl,
+            uploadedAt: new Date().toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        });
+
+        modalProof.classList.remove('open');
+        formProof.reset();
+        resetProofPreview();
+        applyProofStates();
+
+        const toast = document.createElement('div');
+        toast.className = 'ss-toast ss-toast--success';
+        toast.textContent = `✓ Bukti transfer untuk #${code} berhasil dikirim!`;
+        document.getElementById('toastContainer').appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+    });
+
+    applyProofStates();
 });
 </script>
 @endpush

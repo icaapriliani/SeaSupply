@@ -13,10 +13,24 @@
 </head>
 <body style="background-color: var(--color-surface);">
 
+<div class="ss-sidebar-mobile-bar ss-sidebar-mobile-bar--employee">
+    <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;">
+        <span>🌊</span>
+        <span>SeaSupply Pegawai</span>
+    </div>
+    <button type="button" class="ss-sidebar-toggle" id="employeeSidebarToggle" aria-label="Buka menu navigasi">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+        Menu
+    </button>
+</div>
+<div class="ss-sidebar-backdrop" id="employeeSidebarBackdrop"></div>
+
 <div class="ss-sidebar-layout">
 
     {{-- ── SIDEBAR EMPLOYEE (Akses Terbatas — Design System Muted Slate) ── --}}
-    <aside class="ss-sidebar" style="background:#25343A;" aria-label="Navigasi Pegawai Operasional">
+    <aside class="ss-sidebar" id="employeeSidebar" style="background:#25343A;" aria-label="Navigasi Pegawai Operasional">
         
         {{-- Brand --}}
         <div class="ss-sidebar__brand">
@@ -109,7 +123,7 @@
     <div class="ss-sidebar__content">
         
         {{-- Top Bar in Content --}}
-        <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-4);padding-bottom:var(--sp-3);border-bottom:1px solid var(--color-border);">
+        <header class="ss-sidebar-header" style="margin-bottom:var(--sp-4);">
             <div>
                 <h1 class="ss-h2" style="margin-bottom:2px;">@yield('header-title', 'Tugas operasional')</h1>
                 <p class="ss-caption">Panel penanganan operasional pesanan dan pengecekan stok produk.</p>
@@ -145,6 +159,24 @@
 {{-- TOAST NOTIFICATION CONTAINER --}}
 <div class="ss-toast-container" id="toastContainer"></div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toggle = document.getElementById('employeeSidebarToggle');
+    const sidebar = document.getElementById('employeeSidebar');
+    const backdrop = document.getElementById('employeeSidebarBackdrop');
+    if (toggle && sidebar && backdrop) {
+        const closeSidebar = () => {
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('open');
+        };
+        toggle.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            backdrop.classList.toggle('open');
+        });
+        backdrop.addEventListener('click', closeSidebar);
+    }
+});
+</script>
 @stack('scripts')
 </body>
 </html>
