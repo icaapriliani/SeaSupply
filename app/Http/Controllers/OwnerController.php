@@ -12,6 +12,8 @@ use App\Models\Order;
 use App\Models\Category;
 use App\Models\StoreMembership;
 use App\Models\User;
+use App\Models\Expense;
+use Illuminate\Support\Facades\Auth;
 
 class OwnerController extends Controller
 {
@@ -547,5 +549,141 @@ class OwnerController extends Controller
         return response()->json([
             'message' => "Pegawai '{$employeeName}' berhasil dihapus dari daftar pegawai toko.",
         ]);
+    }
+
+    // =========================================================================
+    // FR-10: Buku Kas Operasional
+    // =========================================================================
+
+    /**
+     * GET /owner/expenses
+     * Daftar pengeluaran + kalkulasi kas bersih
+     */
+    public function expenses(Request $request)
+    {
+        $store = $this->getOwnerStore();
+
+        $period = $request->get('period', 'this_month');
+        [$start, $end] = $this->resolvePeriod($period, $request);
+
+        $expenses = Expense::forStore($store->id)
+            ->forPeriod($start, $end)
+            ->with('creator')
+            ->orderBy('date', 'desc')
+            ->get();
+
+        // Total pemasukan dari pesanan (non-cancelled) dalam periode
+        $totalIncome = Order::where('store_id', $store->id)
+            ->whereNotIn('status', ['cancelled'])
+            ->whereBetween('created_at', [$start . ' 00:00:00', $end . ' 23:59:59'])
+            ->sum('subtotal');
+
+        $totalExpenses = $expenses->sum('amount');
+        $netCash       = $totalIncome - $totalExpenses;
+
+        return response()->json([
+            'data' => [
+                'expenses'       => $expenses,
+                'total_income'   => $totalIncome,
+                'total_expenses' => $totalExpenses,
+                'net_cash'       => $netCash,
+                'period'         => ['start' => $start, 'end' => $end],
+                'categories'     => Expense::CATEGORIES,
+            ],
+            'message' => 'OK',
+        ]);
+    }
+
+    /**
+     * POST /owner/expenses
+     */
+    public function storeExpense(Request $request)
+    {
+        $store = $this->getOwnerStore();
+
+        $validated = $request->validate([
+            'title'    => 'required|string|max:200',
+            'category' => 'required|string|in:es_batu,garam,packing,transport,other',
+            'amount'   => 'required|integer|min:500',
+            'date'     => 'required|date',
+            'notes'    => 'nullable|string|max:1000',
+        ]);
+
+        $expense = DB::transaction(function () use ($store, $validated) {
+            return Expense::create([
+                'store_id'   => $store->id,
+                'title'      => strip_tags($validated['title']),
+                'category'   => $validated['category'],
+                'amount'     => $validated['amount'],
+                'date'       => $validated['date'],
+                'notes'      => isset($validated['notes']) ? strip_tags($validated['notes']) : null,
+                'created_by' => Auth::id(),
+            ]);
+        });
+
+        return response()->json([
+            'data'    => $expense,
+            'message' => "Pengeluaran '{$expense->title}' berhasil dicatat.",
+        ], 201);
+    }
+
+    /**
+     * DELETE /owner/expenses/{id}
+     */
+    public function destroyExpense(int $id)
+    {
+        $store   = $this->getOwnerStore();
+        $expense = Expense::where('store_id', $store->id)->findOrFail($id);
+        $title   = $expense->title;
+        $expense->delete();
+
+        return response()->json([
+            'message' => "Pengeluaran '{$title}' berhasil dihapus.",
+        ]);
+    }
+
+    // =========================================================================
+    // Verifikasi Bukti Pembayaran
+    // =========================================================================
+
+    /**
+     * PATCH /owner/orders/{orderCode}/verify-payment
+     */
+    public function verifyPayment(Request $request, string $orderCode)
+    {
+        $store = $this->getOwnerStore();
+        $order = Order::where('store_id', $store->id)
+            ->where('order_code', $orderCode)
+            ->firstOrFail();
+
+        $request->validate([
+            'action' => 'required|in:approve,reject',
+        ]);
+
+        if ($request->action === 'approve') {
+            $order->status = 'processing';
+            $order->save();
+            $message = "Pembayaran pesanan {$orderCode} disetujui. Status: Processing.";
+        } else {
+            // Tolak: kembalikan ke pending, hapus bukti agar pembeli bisa upload ulang
+            $order->payment_proof = null;
+            $order->save();
+            $message = "Bukti pembayaran pesanan {$orderCode} ditolak. Pembeli perlu mengunggah ulang.";
+        }
+
+        return response()->json(['data' => $order, 'message' => $message]);
+    }
+
+    // ─── Period helper ─────────────────────────────────────────────────────────
+
+    private function resolvePeriod(string $period, Request $request): array
+    {
+        return match ($period) {
+            'this_month'  => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
+            'last_month'  => [now()->subMonth()->startOfMonth()->toDateString(), now()->subMonth()->endOfMonth()->toDateString()],
+            'this_year'   => [now()->startOfYear()->toDateString(), now()->endOfYear()->toDateString()],
+            'custom'      => [$request->get('start_date', now()->startOfMonth()->toDateString()), $request->get('end_date', now()->toDateString())],
+            default       => [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()],
+        };
     }
 }

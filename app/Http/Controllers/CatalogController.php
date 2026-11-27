@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Order;
@@ -275,6 +276,49 @@ class CatalogController extends Controller
         return view('catalog.orders', [
             'orders'    => $filteredOrders,
             'allOrders' => $allOrders,
+        ]);
+    }
+
+    // =========================================================================
+    // Upload Bukti Pembayaran
+    // =========================================================================
+
+    /**
+     * POST /catalog/orders/{order}/upload-payment
+     * Pembeli mengunggah foto bukti transfer
+     */
+    public function uploadPaymentProof(Request $request, Order $order)
+    {
+        // Pastikan order milik pembeli yang login
+        if ($order->buyer_user_id !== Auth::id()) {
+            return response()->json([
+                'error' => ['code' => 'FORBIDDEN', 'message' => 'Akses ditolak.'],
+            ], 403);
+        }
+
+        if ($order->status !== 'pending') {
+            return response()->json([
+                'error' => ['code' => 'INVALID_STATUS', 'message' => 'Bukti pembayaran hanya bisa diunggah untuk pesanan berstatus Menunggu Pembayaran.'],
+            ], 422);
+        }
+
+        $request->validate([
+            'proof_image' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
+        ]);
+
+        // Hapus file lama jika ada
+        if ($order->payment_proof && Storage::disk('public')->exists($order->payment_proof)) {
+            Storage::disk('public')->delete($order->payment_proof);
+        }
+
+        $path = $request->file('proof_image')->store('payments', 'public');
+
+        $order->payment_proof = $path;
+        $order->save();
+
+        return response()->json([
+            'data'    => ['payment_proof_url' => Storage::url($path)],
+            'message' => 'Bukti pembayaran berhasil diunggah. Menunggu verifikasi toko.',
         ]);
     }
 }
